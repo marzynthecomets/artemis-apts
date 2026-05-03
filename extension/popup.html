@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apartment Tracker</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <!-- Login Screen -->
+  <div id="auth-screen">
+    <h1>Apartment Tracker</h1>
+    <p id="auth-message">Sign in to start tracking listings</p>
+    <input type="email" id="auth-email" placeholder="Email">
+    <input type="password" id="auth-password" placeholder="Password">
+    <div class="auth-buttons">
+      <button id="sign-in-btn">Sign in</button>
+      <button id="sign-up-btn" class="secondary">Sign up</button>
+    </div>
+    <p id="auth-error" class="error"></p>
+  </div>
+
+  <!-- Main Screen (hidden until logged in) -->
+  <div id="main-screen" class="hidden">
+    <!-- Tab Bar -->
+    <div class="tab-bar">
+      <button class="tab active" data-tab="listing">Listing</button>
+      <button class="tab" data-tab="template">Message</button>
+      <button id="sign-out-btn" class="sign-out" title="Sign out">Sign out</button>
+    </div>
+
+    <!-- Listing Tab -->
+    <div id="listing-tab" class="tab-content active">
+      <div class="field">
+        <label for="url">Listing URL</label>
+        <input type="url" id="url" placeholder="https://streeteasy.com/..." readonly>
+      </div>
+
+      <div class="field">
+        <label for="address">Address</label>
+        <input type="text" id="address" placeholder="123 Main St, Brooklyn, NY">
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label for="price">Price</label>
+          <input type="number" id="price" placeholder="2500">
+        </div>
+        <div class="field">
+          <label for="bedrooms">Beds</label>
+          <input type="number" id="bedrooms" placeholder="1" min="0" max="10">
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="realtor-name">Realtor name</label>
+        <input type="text" id="realtor-name" placeholder="Jane Smith">
+      </div>
+
+      <div class="field">
+        <label for="realtor-contact">Realtor contact</label>
+        <input type="text" id="realtor-contact" placeholder="Phone or email">
+      </div>
+
+      <div class="field">
+        <label for="status">Status</label>
+        <select id="status">
+          <option value="Interested">Interested</option>
+          <option value="Contacted">Contacted</option>
+          <option value="Scheduled">Scheduled</option>
+          <option value="Toured">Toured</option>
+        </select>
+      </div>
+
+      <!-- Showing fields - only visible when status is "Seeing" -->
+      <div id="showing-fields" class="hidden">
+        <div class="row">
+          <div class="field">
+            <label for="showing-date">Showing date</label>
+            <input type="date" id="showing-date">
+          </div>
+          <div class="field">
+            <label for="showing-time">Showing time</label>
+            <input type="time" id="showing-time">
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="notes">Notes</label>
+        <textarea id="notes" rows="3" placeholder="Anything to remember..."></textarea>
+      </div>
+
+      <button id="save-btn">Save listing</button>
+      <p id="save-status" class="status-message"></p>
+    </div>
+
+    <!-- Message Template Tab -->
+    <div id="template-tab" class="tab-content">
+      <div class="field">
+        <label for="template-text">Your inquiry template</label>
+        <textarea id="template-text" rows="8" placeholder="Hi, I'm interested in the listing at [ADDRESS]. I'm a quiet tenant with a cat. Could you let me know about availability and scheduling a showing? Thank you!"></textarea>
+      </div>
+      <button id="copy-template-btn">Copy to clipboard</button>
+      <button id="save-template-btn" class="secondary">Save template</button>
+      <p id="template-status" class="status-message"></p>
+    </div>
+  </div>
+
+  <script src="supabase.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
