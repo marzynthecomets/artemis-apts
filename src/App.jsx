@@ -1,0 +1,1213 @@
+import { useState, useEffect, useCallback, useRef } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  throw new Error("Missing VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY in .env");
+}
+
+// Drop legacy hand-rolled session key so existing users land on the SDK's storage cleanly.
+localStorage.removeItem("sb_session");
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+  },
+});
+
+// ============================================
+// ICONS (SVG)
+// ============================================
+const icons = {
+  realtor: (size = 24, fill = "#fff") => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={fill} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  ),
+  link: (size = 24, fill = "#fff") => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={fill} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  ),
+  map: (size = 24, fill = "#fff") => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={fill} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
+  ),
+  calendar: (size = 24, fill = "#fff") => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={fill} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  ),
+  chevronDown: (size = 14) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  ),
+  kebab: () => (
+    <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+      {[0, 1, 2].map((i) => (
+        <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: "var(--navy)" }} />
+      ))}
+    </div>
+  ),
+  edit: (size = 20) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="var(--navy)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+    </svg>
+  ),
+  menu: (size = 24) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="var(--navy)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
+  ),
+  close: (size = 20) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  ),
+  minus: () => <span style={{ fontSize: 28, fontWeight: 300, lineHeight: 1, color: "var(--navy)" }}>—</span>,
+  plus: () => <span style={{ fontSize: 28, fontWeight: 300, lineHeight: 1, color: "var(--navy)" }}>+</span>,
+  copy: (size = 18) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  ),
+};
+
+function IconCircle({ icon, bg = "var(--navy)", size = 38, iconSize = 20 }) {
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        background: bg,
+        border: `1px solid var(--navy)`,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}
+    >
+      {icons[icon]?.(iconSize, "#fff")}
+    </div>
+  );
+}
+
+// ============================================
+// STATUS COLORS
+// ============================================
+const STATUS_STYLES = {
+  Interested: { bg: "#ffffff", border: "#000", color: "#000" },
+  Contacted: { bg: "#ffffff", border: "#000", color: "#000" },
+  Scheduled: { bg: "#e8f5e0", border: "#4a7c2e", color: "#2d5016" },
+  Toured: { bg: "#f5ecd7", border: "#8b7642", color: "#5a4a20" },
+};
+
+// ============================================
+// POPOVER COMPONENT
+// ============================================
+function Popover({ children, isOpen, onClose, style = {} }) {
+  if (!isOpen) return null;
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.35)", zIndex: 100 }} />
+      <div
+        style={{
+          position: "fixed",
+          top: "50%",
+          left: "50%",
+          transform: "translate(-50%, -50%)",
+          zIndex: 101,
+          borderRadius: 12,
+          padding: "28px 32px",
+          minWidth: 280,
+          maxWidth: "90vw",
+          ...style,
+        }}
+      >
+        <button onClick={onClose} style={{ position: "absolute", top: 12, right: 12, background: "none", border: "none", cursor: "pointer", color: style.color || "#fff" }}>
+          {icons.close(20)}
+        </button>
+        {children}
+      </div>
+    </>
+  );
+}
+
+// ============================================
+// DATE/TIME PICKER POPOVER
+// ============================================
+function DateTimePopover({ isOpen, onClose, onSubmit, title = "Schedule showing", initialDate = "", initialTime = "" }) {
+  const [date, setDate] = useState(initialDate);
+  const [time, setTime] = useState(initialTime);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (isOpen) {
+      setDate(initialDate);
+      setTime(initialTime);
+      setError("");
+    }
+  }, [isOpen, initialDate, initialTime]);
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    if (!date || !time) {
+      setError("Pick a date and a time.");
+      return;
+    }
+    onSubmit(date, time);
+  }
+
+  return (
+    <Popover isOpen={isOpen} onClose={onClose} style={{ background: "#fff", color: "#000", border: "2px solid #FF8C20" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
+        <IconCircle icon="calendar" bg="#FF8C20" size={38} iconSize={20} />
+        <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 22, color: "var(--navy)" }}>{title}</span>
+      </div>
+      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: "#555" }}>
+          Date
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #ccc", fontFamily: "inherit", fontSize: 15 }} />
+        </label>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4, fontFamily: "'DM Sans', sans-serif", fontSize: 13, color: "#555" }}>
+          Time
+          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} required style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #ccc", fontFamily: "inherit", fontSize: 15 }} />
+        </label>
+        {error && <p style={{ color: "#c33", fontSize: 13, margin: 0 }}>{error}</p>}
+        <button type="submit" style={{ marginTop: 6, padding: "10px 20px", background: "var(--navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>
+          Save
+        </button>
+      </form>
+    </Popover>
+  );
+}
+
+// ============================================
+// CONFIRMATION DIALOG
+// ============================================
+function ConfirmDialog({ isOpen, onClose, onConfirm, title, message, confirmLabel = "Delete", danger = true }) {
+  return (
+    <Popover isOpen={isOpen} onClose={onClose} style={{ background: "#fff", color: "#000", border: `2px solid ${danger ? "#c33" : "#FF8C20"}` }}>
+      <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 20, color: "var(--navy)", marginBottom: 8 }}>{title}</div>
+      <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 15, color: "#333", margin: "0 0 18px" }}>{message}</p>
+      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+        <button onClick={onClose} style={{ padding: "8px 18px", background: "transparent", color: "var(--navy)", border: "1px solid var(--navy)", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, fontWeight: 500, cursor: "pointer" }}>
+          Cancel
+        </button>
+        <button onClick={onConfirm} style={{ padding: "8px 18px", background: danger ? "#c33" : "var(--navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+          {confirmLabel}
+        </button>
+      </div>
+    </Popover>
+  );
+}
+
+// ============================================
+// STATUS DROPDOWN
+// ============================================
+function StatusDropdown({ value, onChange, showSchedule = true }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const s = STATUS_STYLES[value] || STATUS_STYLES.Interested;
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const options = ["Interested", "Contacted", ...(showSchedule ? ["Schedule?"] : []), "Toured", "Remove?"];
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          padding: "6px 12px",
+          borderRadius: 63,
+          border: `1px solid ${s.border}`,
+          background: s.bg,
+          color: s.color,
+          fontFamily: "'DM Sans', sans-serif",
+          fontWeight: 500,
+          fontSize: "clamp(13px, 2vw, 16px)",
+          cursor: "pointer",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {value} {icons.chevronDown(12)}
+      </button>
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            top: "100%",
+            left: 0,
+            background: "#fff",
+            border: "1px solid #ccc",
+            borderRadius: 8,
+            padding: "8px 0",
+            zIndex: 50,
+            minWidth: 140,
+            boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+          }}
+        >
+          {options
+            .filter((o) => o !== value)
+            .map((opt) => (
+              <div
+                key={opt}
+                onClick={() => {
+                  setOpen(false);
+                  onChange(opt);
+                }}
+                style={{
+                  padding: "8px 14px",
+                  cursor: "pointer",
+                  fontFamily: "'DM Sans', sans-serif",
+                  fontSize: 15,
+                  color: opt === "Remove?" ? "#a33" : "#000",
+                }}
+                onMouseEnter={(e) => (e.target.style.background = "#f5f5f5")}
+                onMouseLeave={(e) => (e.target.style.background = "transparent")}
+              >
+                {opt}
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// COMMUTE CHIP
+// ============================================
+function CommuteChip({ name, minutes, listingAddress, destAddress }) {
+  const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(listingAddress)}&destination=${encodeURIComponent(destAddress)}&travelmode=transit`;
+  return (
+    <a
+      href={mapsUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        padding: "4px 12px",
+        borderRadius: 63,
+        border: "0.5px solid #000",
+        background: "#fff",
+        fontFamily: "'DM Sans', sans-serif",
+        fontSize: "clamp(12px, 1.8vw, 15px)",
+        textDecoration: "none",
+        color: "#000",
+        whiteSpace: "nowrap",
+      }}
+    >
+      <span style={{ fontWeight: 300 }}>{name}</span>
+      <span style={{ fontWeight: 300 }}>|</span>
+      <span style={{ fontWeight: 700 }}>{minutes}min</span>
+    </a>
+  );
+}
+
+// ============================================
+// LISTING ITEM COMPONENT
+// ============================================
+function ListingItem({ listing, commutes, destinations, onStatusChange, onDelete, isMobile }) {
+  const [realtorOpen, setRealtorOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [notesText, setNotesText] = useState(listing.notes || "");
+
+  async function saveNotes() {
+    await supabase.from("listings").update({ notes: notesText }).eq("id", listing.id);
+    setNotesOpen(false);
+  }
+
+  function handleStatusChange(newStatus) {
+    if (newStatus === "Remove?") {
+      setConfirmOpen(true);
+    } else if (newStatus === "Schedule?") {
+      setScheduleOpen(true);
+    } else {
+      onStatusChange(listing.id, newStatus);
+    }
+  }
+
+  function handleScheduleSubmit(date, time) {
+    setScheduleOpen(false);
+    onStatusChange(listing.id, "Scheduled", date, time);
+  }
+
+  function handleConfirmDelete() {
+    setConfirmOpen(false);
+    onDelete(listing.id);
+  }
+
+  const listingCommutes = commutes.filter((c) => c.listing_id === listing.id);
+
+  if (isMobile) {
+    return (
+      <div style={{ borderTop: "1px solid #000", paddingTop: 20, display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {listing.status === "Toured" && (
+            <button onClick={() => setNotesOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}>
+              <IconCircle icon="edit" bg="transparent" size={32} iconSize={20} />
+            </button>
+          )}
+          <StatusDropdown value={listing.status} onChange={handleStatusChange} />
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button onClick={() => setRealtorOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}>
+              <IconCircle icon="realtor" size={30} iconSize={18} />
+            </button>
+            <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 18, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {listing.address || "No address"}
+            </span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <a href={listing.url} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+              <IconCircle icon="link" size={30} iconSize={16} />
+            </a>
+            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 18 }}>${listing.price?.toLocaleString() || "—"}</span>
+            <span style={{ borderLeft: "1px solid #000", paddingLeft: 10, fontFamily: "'DM Sans', sans-serif", fontSize: 18 }}>
+              {listing.bedrooms != null ? `${listing.bedrooms} bed` : "—"}
+            </span>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <a
+            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(listing.address || "")}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ flexShrink: 0 }}
+          >
+            <IconCircle icon="map" size={30} iconSize={16} />
+          </a>
+          {listingCommutes.map((c) => {
+            const dest = destinations.find((d) => d.id === c.destination_id);
+            return (
+              <CommuteChip
+                key={c.id}
+                name={dest?.name || "?"}
+                minutes={c.duration_minutes}
+                listingAddress={listing.address || ""}
+                destAddress={dest?.address || ""}
+              />
+            );
+          })}
+        </div>
+        <RealtorPopover listing={listing} isOpen={realtorOpen} onClose={() => setRealtorOpen(false)} />
+        <NotesPopover notes={notesText} setNotes={setNotesText} isOpen={notesOpen} onClose={() => setNotesOpen(false)} onSave={saveNotes} />
+        <DateTimePopover isOpen={scheduleOpen} onClose={() => setScheduleOpen(false)} onSubmit={handleScheduleSubmit} title="Schedule showing" />
+        <ConfirmDialog isOpen={confirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmDelete} title="Remove listing?" message={`Remove the listing at ${listing.address || "this address"}? This can't be undone.`} confirmLabel="Remove" />
+      </div>
+    );
+  }
+
+  // Desktop
+  return (
+    <div style={{ borderTop: "1px solid #000", padding: "18px 0", display: "flex", alignItems: "center", gap: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+        {listing.status === "Toured" && (
+          <button onClick={() => setNotesOpen(true)} style={{ background: "none", border: "none", cursor: "pointer" }}>
+            <IconCircle icon="edit" bg="transparent" size={34} iconSize={18} />
+          </button>
+        )}
+        <StatusDropdown value={listing.status} onChange={handleStatusChange} />
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        <button onClick={() => setRealtorOpen(true)} style={{ background: "none", border: "none", cursor: "pointer" }}>
+          <IconCircle icon="realtor" size={38} iconSize={20} />
+        </button>
+        <span
+          style={{
+            fontFamily: "'Space Grotesk', sans-serif",
+            fontWeight: 700,
+            fontSize: 20,
+            width: 220,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {listing.address || "No address"}
+        </span>
+      </div>
+      <div style={{ borderLeft: "1px solid #000", paddingLeft: 16, display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        <a href={listing.url} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+          <IconCircle icon="link" size={38} iconSize={18} />
+        </a>
+        <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 20, width: 80 }}>${listing.price?.toLocaleString() || "—"}</span>
+      </div>
+      <div style={{ borderLeft: "1px solid #000", paddingLeft: 14, fontFamily: "'DM Sans', sans-serif", fontSize: 20, width: 65, flexShrink: 0 }}>
+        {listing.bedrooms != null ? `${listing.bedrooms} bed` : "—"}
+      </div>
+      <div style={{ borderLeft: "1px solid #000", paddingLeft: 16, display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+        <a
+          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(listing.address || "")}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ flexShrink: 0 }}
+        >
+          <IconCircle icon="map" size={38} iconSize={18} />
+        </a>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {listingCommutes.map((c) => {
+            const dest = destinations.find((d) => d.id === c.destination_id);
+            return (
+              <CommuteChip
+                key={c.id}
+                name={dest?.name || "?"}
+                minutes={c.duration_minutes}
+                listingAddress={listing.address || ""}
+                destAddress={dest?.address || ""}
+              />
+            );
+          })}
+        </div>
+      </div>
+      <RealtorPopover listing={listing} isOpen={realtorOpen} onClose={() => setRealtorOpen(false)} />
+      <NotesPopover notes={notesText} setNotes={setNotesText} isOpen={notesOpen} onClose={() => setNotesOpen(false)} onSave={saveNotes} />
+      <DateTimePopover isOpen={scheduleOpen} onClose={() => setScheduleOpen(false)} onSubmit={handleScheduleSubmit} title="Schedule showing" />
+      <ConfirmDialog isOpen={confirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmDelete} title="Remove listing?" message={`Remove the listing at ${listing.address || "this address"}? This can't be undone.`} confirmLabel="Remove" />
+    </div>
+  );
+}
+
+// ============================================
+// SHOWING ITEM COMPONENT
+// ============================================
+function ShowingItem({ listing, commutes, destinations, onKebabAction, onReschedule, onDelete, isMobile }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [realtorOpen, setRealtorOpen] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [notesText, setNotesText] = useState(listing.notes || "");
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  async function saveNotes() {
+    await supabase.from("listings").update({ notes: notesText }).eq("id", listing.id);
+    setNotesOpen(false);
+  }
+
+  function handleRescheduleSubmit(date, time) {
+    setRescheduleOpen(false);
+    onReschedule(listing.id, date, time);
+  }
+
+  function handleConfirmDelete() {
+    setConfirmOpen(false);
+    onDelete(listing.id);
+  }
+
+  const showingDate = listing.showing_date ? new Date(listing.showing_date + "T00:00:00") : null;
+  const dateStr = showingDate
+    ? showingDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })
+    : "TBD";
+  const timeStr = listing.showing_time
+    ? new Date("2000-01-01T" + listing.showing_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+    : "";
+
+  const listingCommutes = commutes.filter((c) => c.listing_id === listing.id);
+
+  const kebabMenu = (
+    <div ref={menuRef} style={{ position: "relative" }}>
+      <button onClick={() => setMenuOpen(!menuOpen)} style={{ background: "none", border: "none", cursor: "pointer", padding: 4 }}>
+        {icons.kebab()}
+      </button>
+      {menuOpen && (
+        <div
+          style={{
+            position: "absolute",
+            right: 0,
+            top: "100%",
+            background: "#fff",
+            border: "1px solid #ddd",
+            borderRadius: 10,
+            padding: "14px 20px",
+            zIndex: 50,
+            minWidth: 170,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.1)",
+          }}
+        >
+          <button onClick={() => { setMenuOpen(false); setNotesOpen(true); }} style={{ position: "absolute", top: 8, right: 8, background: "none", border: "none", cursor: "pointer" }}>
+            {icons.close(16)}
+          </button>
+          {["Add Notes", "Reschedule", "Cancel", "Delete Listing?"].map((action) => (
+            <div
+              key={action}
+              onClick={() => {
+                setMenuOpen(false);
+                if (action === "Add Notes") setNotesOpen(true);
+                else if (action === "Reschedule") setRescheduleOpen(true);
+                else if (action === "Delete Listing?") setConfirmOpen(true);
+                else onKebabAction(listing.id, action);
+              }}
+              style={{
+                padding: "8px 0",
+                cursor: "pointer",
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: 16,
+                fontWeight: action === "Add Notes" ? 700 : 400,
+                color: action === "Delete Listing?" ? "#a33" : "#000",
+              }}
+              onMouseEnter={(e) => (e.target.style.opacity = 0.7)}
+              onMouseLeave={(e) => (e.target.style.opacity = 1)}
+            >
+              {action}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  if (isMobile) {
+    return (
+      <div style={{ borderTop: "1px solid #000", paddingTop: 16, display: "flex", flexDirection: "column", gap: 10, position: "relative" }}>
+        <div style={{ position: "absolute", top: 16, right: 0 }}>{kebabMenu}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <IconCircle icon="calendar" bg="#FF8C20" size={42} iconSize={22} />
+          <div>
+            <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 18 }}>{dateStr}</div>
+            <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 16 }}>{timeStr}</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <button onClick={() => setRealtorOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}>
+              <IconCircle icon="realtor" size={30} iconSize={18} />
+            </button>
+            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 16, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {listing.address || "No address"}
+            </span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <a href={listing.url} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+              <IconCircle icon="link" size={30} iconSize={16} />
+            </a>
+            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 16 }}>${listing.price?.toLocaleString() || "—"}</span>
+            <span style={{ borderLeft: "1px solid #000", paddingLeft: 10, fontFamily: "'DM Sans', sans-serif", fontSize: 16 }}>
+              {listing.bedrooms != null ? `${listing.bedrooms} bed` : "—"}
+            </span>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(listing.address || "")}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+            <IconCircle icon="map" size={30} iconSize={16} />
+          </a>
+          {listingCommutes.map((c) => {
+            const dest = destinations.find((d) => d.id === c.destination_id);
+            return <CommuteChip key={c.id} name={dest?.name || "?"} minutes={c.duration_minutes} listingAddress={listing.address || ""} destAddress={dest?.address || ""} />;
+          })}
+        </div>
+        <RealtorPopover listing={listing} isOpen={realtorOpen} onClose={() => setRealtorOpen(false)} />
+        <NotesPopover notes={notesText} setNotes={setNotesText} isOpen={notesOpen} onClose={() => setNotesOpen(false)} onSave={saveNotes} />
+        <DateTimePopover isOpen={rescheduleOpen} onClose={() => setRescheduleOpen(false)} onSubmit={handleRescheduleSubmit} title="Reschedule showing" initialDate={listing.showing_date || ""} initialTime={listing.showing_time || ""} />
+        <ConfirmDialog isOpen={confirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmDelete} title="Delete listing?" message={`Delete the listing at ${listing.address || "this address"}? This can't be undone.`} confirmLabel="Delete" />
+      </div>
+    );
+  }
+
+  // Desktop
+  return (
+    <div style={{ borderTop: "1px solid #000", padding: "20px 0", position: "relative" }}>
+      <div style={{ position: "absolute", top: 20, right: 0 }}>{kebabMenu}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <IconCircle icon="calendar" bg="#FF8C20" size={38} iconSize={20} />
+          <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 26 }}>{dateStr}</span>
+          <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 26 }}>{timeStr}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button onClick={() => setRealtorOpen(true)} style={{ background: "none", border: "none", cursor: "pointer" }}>
+              <IconCircle icon="realtor" size={38} iconSize={20} />
+            </button>
+            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 20, width: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {listing.address || "No address"}
+            </span>
+          </div>
+          <div style={{ borderLeft: "1px solid #000", paddingLeft: 16, display: "flex", alignItems: "center", gap: 8 }}>
+            <a href={listing.url} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+              <IconCircle icon="link" size={38} iconSize={18} />
+            </a>
+            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 20, width: 80 }}>${listing.price?.toLocaleString() || "—"}</span>
+          </div>
+          <div style={{ borderLeft: "1px solid #000", paddingLeft: 14, fontFamily: "'DM Sans', sans-serif", fontSize: 20, width: 65 }}>
+            {listing.bedrooms != null ? `${listing.bedrooms} bed` : "—"}
+          </div>
+          <div style={{ borderLeft: "1px solid #000", paddingLeft: 16, display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+            <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(listing.address || "")}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
+              <IconCircle icon="map" size={38} iconSize={18} />
+            </a>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {listingCommutes.map((c) => {
+                const dest = destinations.find((d) => d.id === c.destination_id);
+                return <CommuteChip key={c.id} name={dest?.name || "?"} minutes={c.duration_minutes} listingAddress={listing.address || ""} destAddress={dest?.address || ""} />;
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+      <RealtorPopover listing={listing} isOpen={realtorOpen} onClose={() => setRealtorOpen(false)} />
+      <NotesPopover notes={notesText} setNotes={setNotesText} isOpen={notesOpen} onClose={() => setNotesOpen(false)} onSave={saveNotes} />
+      <DateTimePopover isOpen={rescheduleOpen} onClose={() => setRescheduleOpen(false)} onSubmit={handleRescheduleSubmit} title="Reschedule showing" initialDate={listing.showing_date || ""} initialTime={listing.showing_time || ""} />
+      <ConfirmDialog isOpen={confirmOpen} onClose={() => setConfirmOpen(false)} onConfirm={handleConfirmDelete} title="Delete listing?" message={`Delete the listing at ${listing.address || "this address"}? This can't be undone.`} confirmLabel="Delete" />
+    </div>
+  );
+}
+
+// ============================================
+// REALTOR POPOVER
+// ============================================
+function RealtorPopover({ listing, isOpen, onClose }) {
+  async function copyText(text) {
+    await navigator.clipboard.writeText(text);
+  }
+  return (
+    <Popover isOpen={isOpen} onClose={onClose} style={{ background: "var(--navy)", color: "#fff", border: "2px solid #FF8C20" }}>
+      <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 13, opacity: 0.7, marginBottom: 4 }}>Realtor</div>
+      <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 22, marginBottom: 16 }}>
+        {listing.realtor_name || "No name"}
+      </div>
+      {listing.realtor_contact && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {listing.realtor_contact.includes("@") ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button onClick={() => copyText(listing.realtor_contact)} style={{ background: "none", border: "none", cursor: "pointer", color: "#fff" }}>
+                {icons.copy(18)}
+              </button>
+              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 17 }}>{listing.realtor_contact}</span>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <button onClick={() => copyText(listing.realtor_contact)} style={{ background: "none", border: "none", cursor: "pointer", color: "#fff" }}>
+                {icons.copy(18)}
+              </button>
+              <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 17 }}>{listing.realtor_contact}</span>
+            </div>
+          )}
+        </div>
+      )}
+    </Popover>
+  );
+}
+
+// ============================================
+// NOTES POPOVER
+// ============================================
+function NotesPopover({ notes, setNotes, isOpen, onClose, onSave }) {
+  return (
+    <Popover isOpen={isOpen} onClose={onClose} style={{ background: "#fff", color: "#000", border: "2px solid #FF8C20" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        {icons.edit(22)}
+        <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 22, color: "var(--navy)" }}>Notes</span>
+      </div>
+      <textarea
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        maxLength={4000}
+        style={{
+          width: "100%",
+          minHeight: 160,
+          padding: 14,
+          borderRadius: 8,
+          border: "1px solid #ccc",
+          fontFamily: "'DM Sans', sans-serif",
+          fontSize: 15,
+          resize: "vertical",
+          boxSizing: "border-box",
+        }}
+        placeholder="How was the tour? What stood out?"
+      />
+      <button
+        onClick={onSave}
+        style={{
+          marginTop: 10,
+          padding: "8px 20px",
+          background: "var(--navy)",
+          color: "#fff",
+          border: "none",
+          borderRadius: 6,
+          fontFamily: "'DM Sans', sans-serif",
+          fontSize: 14,
+          cursor: "pointer",
+        }}
+      >
+        Save notes
+      </button>
+    </Popover>
+  );
+}
+
+// ============================================
+// SORT DROPDOWN
+// ============================================
+function SortDropdown({ value, onChange, options, isMobile }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen(!open)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: isMobile ? "4px 12px" : "8px 16px",
+          borderRadius: 63,
+          background: "var(--navy)",
+          color: "#fff",
+          border: "none",
+          fontFamily: "'DM Sans', sans-serif",
+          fontWeight: 500,
+          fontSize: isMobile ? 12 : 15,
+          cursor: "pointer",
+        }}
+      >
+        {value} {icons.chevronDown(12)}
+      </button>
+      {open && (
+        <div style={{ position: "absolute", top: "100%", left: 0, background: "#fff", border: "1px solid #ccc", borderRadius: 8, padding: "6px 0", zIndex: 50, minWidth: 130, boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+          {options.map((opt) => (
+            <div
+              key={opt}
+              onClick={() => { onChange(opt); setOpen(false); }}
+              style={{ padding: "7px 14px", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 14, fontWeight: opt === value ? 700 : 400 }}
+              onMouseEnter={(e) => (e.target.style.background = "#f5f5f5")}
+              onMouseLeave={(e) => (e.target.style.background = "transparent")}
+            >
+              {opt}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================
+// AUTH SCREEN
+// ============================================
+function AuthScreen({ onAuth }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+  const [mode, setMode] = useState("signin");
+  const [loading, setLoading] = useState(false);
+
+  function switchMode(next) {
+    setMode(next);
+    setError("");
+    setInfo("");
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError("");
+    setInfo("");
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError("Enter a valid email address.");
+      return;
+    }
+    if (mode !== "reset") {
+      if (!password || password.length < 6) {
+        setError("Password must be at least 6 characters.");
+        return;
+      }
+    }
+
+    setLoading(true);
+    try {
+      if (mode === "signup") {
+        const { data, error: err } = await supabase.auth.signUp({ email: trimmedEmail, password });
+        if (err) throw err;
+        if (data.session) onAuth(data.user);
+        else setInfo("Check your email to confirm your account, then sign in.");
+      } else if (mode === "reset") {
+        const { error: err } = await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+          redirectTo: window.location.origin,
+        });
+        if (err) throw err;
+        setInfo("If an account exists for that email, a reset link is on the way.");
+      } else {
+        const { data, error: err } = await supabase.auth.signInWithPassword({ email: trimmedEmail, password });
+        if (err) throw err;
+        onAuth(data.user);
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+    setLoading(false);
+  }
+
+  const titleByMode = { signin: "Sign in to track listings", signup: "Create your account", reset: "Reset your password" };
+  const ctaByMode = { signin: "Sign in", signup: "Sign up", reset: "Send reset link" };
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", fontFamily: "'DM Sans', sans-serif" }}>
+      <div style={{ background: "#fff", borderRadius: 16, padding: "40px 36px", width: 360, border: "1px solid #ddd" }}>
+        <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 28, color: "var(--navy)", margin: "0 0 4px" }}>ArtemisApts</h1>
+        <p style={{ color: "#666", fontSize: 14, margin: "0 0 24px" }}>{titleByMode[mode]}</p>
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <input type="email" autoComplete="email" placeholder="Email" maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #ccc", fontSize: 14, fontFamily: "inherit" }} />
+          {mode !== "reset" && (
+            <input type="password" autoComplete={mode === "signup" ? "new-password" : "current-password"} placeholder="Password" minLength={6} maxLength={72} value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #ccc", fontSize: 14, fontFamily: "inherit" }} />
+          )}
+          <button type="submit" disabled={loading} style={{ padding: "10px", borderRadius: 8, background: "var(--navy)", color: "#fff", border: "none", fontSize: 14, fontWeight: 600, cursor: "pointer", opacity: loading ? 0.6 : 1 }}>
+            {loading ? "..." : ctaByMode[mode]}
+          </button>
+        </form>
+        {error && <p style={{ color: "#c33", fontSize: 13, marginTop: 10 }}>{error}</p>}
+        {info && <p style={{ color: "var(--navy)", fontSize: 13, marginTop: 10 }}>{info}</p>}
+        {mode === "signin" && (
+          <p style={{ textAlign: "right", fontSize: 13, marginTop: 10 }}>
+            <span onClick={() => switchMode("reset")} style={{ color: "var(--navy)", cursor: "pointer", fontWeight: 500 }}>Forgot password?</span>
+          </p>
+        )}
+        <p style={{ textAlign: "center", fontSize: 13, marginTop: 16, color: "#666" }}>
+          {mode === "signin" && (<>No account? <span onClick={() => switchMode("signup")} style={{ color: "var(--navy)", cursor: "pointer", fontWeight: 600 }}>Sign up</span></>)}
+          {mode === "signup" && (<>Already have one? <span onClick={() => switchMode("signin")} style={{ color: "var(--navy)", cursor: "pointer", fontWeight: 600 }}>Sign in</span></>)}
+          {mode === "reset" && (<>Remembered it? <span onClick={() => switchMode("signin")} style={{ color: "var(--navy)", cursor: "pointer", fontWeight: 600 }}>Sign in</span></>)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// SETTINGS SCREEN
+// ============================================
+function SettingsScreen({ onClose, destinations, setDestinations, isMobile, user }) {
+  const [newName, setNewName] = useState("");
+  const [newAddr, setNewAddr] = useState("");
+  const [error, setError] = useState("");
+
+  async function addDestination() {
+    setError("");
+    const name = newName.trim();
+    const address = newAddr.trim();
+    if (!name || !address) {
+      setError("Both name and address are required.");
+      return;
+    }
+    if (name.length > 60) {
+      setError("Name must be 60 characters or fewer.");
+      return;
+    }
+    if (address.length > 200) {
+      setError("Address must be 200 characters or fewer.");
+      return;
+    }
+    const { data, error: err } = await supabase.from("destinations").insert([{ name, address }]).select();
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    if (data) setDestinations((prev) => [...prev, ...data]);
+    setNewName("");
+    setNewAddr("");
+  }
+
+  async function removeDestination(id) {
+    await supabase.from("destinations").delete().eq("id", id);
+    setDestinations((prev) => prev.filter((d) => d.id !== id));
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "var(--bg)", zIndex: 200, overflow: "auto" }}>
+      <div style={{ maxWidth: 600, margin: "0 auto", padding: isMobile ? "20px" : "40px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 30 }}>
+          <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 24, color: "var(--navy)", margin: 0 }}>Settings</h2>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer" }}>{icons.close(24)}</button>
+        </div>
+        <h3 style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 18, margin: "0 0 14px" }}>Commute destinations</h3>
+        <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: "#666", margin: "0 0 16px" }}>
+          Add places you commute to regularly. Commute times will be calculated for each listing.
+        </p>
+        {destinations.map((d) => (
+          <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", border: "1px solid #ddd", borderRadius: 8, marginBottom: 8, background: "#fff" }}>
+            <div>
+              <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 15 }}>{d.name}</div>
+              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: "#888" }}>{d.address}</div>
+            </div>
+            <button onClick={() => removeDestination(d.id)} style={{ background: "none", border: "none", color: "#a33", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
+              Remove
+            </button>
+          </div>
+        ))}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
+          <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Name (e.g. Work)" maxLength={60} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #ccc", fontFamily: "'DM Sans', sans-serif", fontSize: 14 }} />
+          <input value={newAddr} onChange={(e) => setNewAddr(e.target.value)} placeholder="Address" maxLength={200} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #ccc", fontFamily: "'DM Sans', sans-serif", fontSize: 14 }} />
+          {error && <p style={{ color: "#c33", fontSize: 13, margin: 0 }}>{error}</p>}
+          <button onClick={addDestination} style={{ padding: "8px 16px", background: "var(--navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, cursor: "pointer", alignSelf: "flex-start" }}>
+            + Add destination
+          </button>
+        </div>
+        <div style={{ borderTop: "1px solid #ddd", marginTop: 30, paddingTop: 20 }}>
+          <h3 style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 18, margin: "0 0 10px" }}>Account</h3>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: "#666" }}>{user?.email || "—"}</span>
+            <button
+              onClick={() => supabase.auth.signOut()}
+              style={{ padding: "6px 14px", border: "1px solid #a33", borderRadius: 6, background: "transparent", color: "#a33", fontFamily: "'DM Sans', sans-serif", fontSize: 13, cursor: "pointer" }}
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// MAIN APP
+// ============================================
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
+  const [hasFetched, setHasFetched] = useState(false);
+  const [listings, setListings] = useState([]);
+  const [commutes, setCommutes] = useState([]);
+  const [destinations, setDestinations] = useState([]);
+  const [showingsOpen, setShowingsOpen] = useState(true);
+  const [listingsOpen, setListingsOpen] = useState(true);
+  const [showingSort, setShowingSort] = useState("Date");
+  const [listingSort, setListingSort] = useState("Price");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    function handleResize() {
+      setIsMobile(window.innerWidth < 768);
+    }
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchData = useCallback(async () => {
+    if (!user) return;
+    setDataLoading(true);
+    try {
+      const [l, c, d] = await Promise.all([
+        supabase.from("listings").select("*"),
+        supabase.from("commutes").select("*"),
+        supabase.from("destinations").select("*"),
+      ]);
+      if (l.error) throw l.error;
+      if (c.error) throw c.error;
+      if (d.error) throw d.error;
+      setListings(l.data ?? []);
+      setCommutes(c.data ?? []);
+      setDestinations(d.data ?? []);
+    } catch (err) {
+      console.error("Fetch error:", err);
+    } finally {
+      setDataLoading(false);
+      setHasFetched(true);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  async function handleStatusChange(id, newStatus, showingDate, showingTime) {
+    const update = { status: newStatus };
+    if (showingDate) update.showing_date = showingDate;
+    if (showingTime) update.showing_time = showingTime;
+    if (newStatus !== "Scheduled") {
+      update.showing_date = null;
+      update.showing_time = null;
+    }
+    await supabase.from("listings").update(update).eq("id", id);
+    fetchData();
+  }
+
+  async function handleDelete(id) {
+    await supabase.from("listings").delete().eq("id", id);
+    fetchData();
+  }
+
+  function handleKebabAction(id, action) {
+    if (action === "Cancel") handleStatusChange(id, "Contacted");
+  }
+
+  function handleReschedule(id, date, time) {
+    handleStatusChange(id, "Scheduled", date, time);
+  }
+
+  if (loading) return null;
+  if (!user) return <AuthScreen onAuth={(u) => { setUser(u); }} />;
+
+  const showings = listings.filter((l) => l.status === "Scheduled");
+  const regularListings = listings.filter((l) => l.status !== "Scheduled");
+
+  // Sort
+  function sortListings(list, sort) {
+    const sorted = [...list];
+    if (sort === "Price") sorted.sort((a, b) => (a.price || 0) - (b.price || 0));
+    else if (sort === "Status") sorted.sort((a, b) => (a.status || "").localeCompare(b.status || ""));
+    else if (sort === "Date") sorted.sort((a, b) => (a.showing_date || "").localeCompare(b.showing_date || ""));
+    return sorted;
+  }
+
+  const sortedShowings = sortListings(showings, showingSort);
+  const sortedListings = sortListings(regularListings, listingSort);
+
+  const sortOptions = ["Price", "Status"];
+  const showingSortOptions = ["Date", "Price"];
+
+  return (
+    <>
+      <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
+        {/* HEADER */}
+        <header style={{ background: "var(--orange)", padding: isMobile ? "18px 20px" : "20px 60px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: isMobile ? 24 : 36, color: "var(--navy)", margin: 0 }}>ArtemisApts</h1>
+          {isMobile ? (
+            <div style={{ position: "relative" }}>
+              <button onClick={() => setMobileMenuOpen(!mobileMenuOpen)} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                {icons.menu(24)}
+              </button>
+              {mobileMenuOpen && (
+                <div style={{ position: "absolute", right: 0, top: "100%", background: "#fff", borderRadius: 8, padding: "8px 0", boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 50, minWidth: 140 }}>
+                  <div onClick={() => { setSettingsOpen(true); setMobileMenuOpen(false); }} style={{ padding: "10px 18px", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 15 }}>Settings</div>
+                  <div onClick={() => supabase.auth.signOut()} style={{ padding: "10px 18px", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 15, color: "#a33" }}>Sign out</div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ display: "flex", gap: 24, fontFamily: "'DM Sans', sans-serif", fontSize: 18, color: "var(--navy)" }}>
+              <span onClick={() => setSettingsOpen(true)} style={{ cursor: "pointer", fontWeight: 500 }}>Settings</span>
+              <span onClick={() => supabase.auth.signOut()} style={{ cursor: "pointer" }}>Sign Out</span>
+            </div>
+          )}
+        </header>
+
+        {/* MAIN CONTENT */}
+        <main style={{ padding: isMobile ? "20px" : "30px 60px", maxWidth: 1300, margin: "0 auto" }}>
+          {/* SHOWINGS SECTION */}
+          <section style={{ marginBottom: 40 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: showingsOpen ? 12 : 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <button onClick={() => setShowingsOpen(!showingsOpen)} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                  {showingsOpen ? icons.minus() : icons.plus()}
+                </button>
+                <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: isMobile ? 22 : 30, margin: 0 }}>Showings</h2>
+                <SortDropdown value={showingSort} onChange={setShowingSort} options={showingSortOptions} isMobile={isMobile} />
+              </div>
+            </div>
+            {showingsOpen && (
+              <div>
+                {dataLoading && !hasFetched ? (
+                  <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 15, color: "#888", padding: "20px 0", borderTop: "1px solid #000" }}>Loading…</p>
+                ) : sortedShowings.length === 0 ? (
+                  <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 15, color: "#888", padding: "20px 0", borderTop: "1px solid #000" }}>
+                    No upcoming showings. Change a listing's status to "Schedule?" to add one.
+                  </p>
+                ) : (
+                  sortedShowings.map((l) => (
+                    <ShowingItem key={l.id} listing={l} commutes={commutes} destinations={destinations} onKebabAction={handleKebabAction} onReschedule={handleReschedule} onDelete={handleDelete} isMobile={isMobile} />
+                  ))
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* LISTINGS SECTION */}
+          <section>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: listingsOpen ? 12 : 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <button onClick={() => setListingsOpen(!listingsOpen)} style={{ background: "none", border: "none", cursor: "pointer" }}>
+                  {listingsOpen ? icons.minus() : icons.plus()}
+                </button>
+                <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: isMobile ? 22 : 30, margin: 0 }}>Listings</h2>
+                <SortDropdown value={listingSort} onChange={setListingSort} options={sortOptions} isMobile={isMobile} />
+              </div>
+            </div>
+            {listingsOpen && (
+              <div>
+                {dataLoading && !hasFetched ? (
+                  <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 15, color: "#888", padding: "20px 0", borderTop: "1px solid #000" }}>Loading…</p>
+                ) : sortedListings.length === 0 ? (
+                  <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 15, color: "#888", padding: "20px 0", borderTop: "1px solid #000" }}>
+                    No listings yet. Use the Chrome extension to save your first listing!
+                  </p>
+                ) : (
+                  sortedListings.map((l) => (
+                    <ListingItem key={l.id} listing={l} commutes={commutes} destinations={destinations} onStatusChange={handleStatusChange} onDelete={handleDelete} isMobile={isMobile} />
+                  ))
+                )}
+              </div>
+            )}
+          </section>
+        </main>
+      </div>
+
+      {settingsOpen && <SettingsScreen onClose={() => { setSettingsOpen(false); fetchData(); }} destinations={destinations} setDestinations={setDestinations} isMobile={isMobile} user={user} />}
+    </>
+  );
+}
