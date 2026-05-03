@@ -1034,6 +1034,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     function handleResize() {
@@ -1106,8 +1107,19 @@ export default function App() {
   if (loading) return null;
   if (!user) return <AuthScreen onAuth={(u) => { setUser(u); }} />;
 
-  const showings = listings.filter((l) => l.status === "Scheduled");
-  const regularListings = listings.filter((l) => l.status !== "Scheduled");
+  // Filter by search query (matches address, realtor name, or notes)
+  const q = searchQuery.trim().toLowerCase();
+  const matchesQuery = (l) => {
+    if (!q) return true;
+    return (
+      (l.address || "").toLowerCase().includes(q) ||
+      (l.realtor_name || "").toLowerCase().includes(q) ||
+      (l.notes || "").toLowerCase().includes(q)
+    );
+  };
+  const filteredListings = listings.filter(matchesQuery);
+  const showings = filteredListings.filter((l) => l.status === "Scheduled");
+  const regularListings = filteredListings.filter((l) => l.status !== "Scheduled");
 
   // Sort
   function sortListings(list, sort) {
@@ -1117,14 +1129,16 @@ export default function App() {
     else if (sort === "Date") sorted.sort((a, b) => (a.showing_date || "").localeCompare(b.showing_date || ""));
     else if (sort === "A–Z") sorted.sort((a, b) => (a.address || "").localeCompare(b.address || ""));
     else if (sort === "Z–A") sorted.sort((a, b) => (b.address || "").localeCompare(a.address || ""));
+    else if (sort === "Newest") sorted.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+    else if (sort === "Oldest") sorted.sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
     return sorted;
   }
 
   const sortedShowings = sortListings(showings, showingSort);
   const sortedListings = sortListings(regularListings, listingSort);
 
-  const sortOptions = ["Price", "Status", "A–Z", "Z–A"];
-  const showingSortOptions = ["Date", "Price", "A–Z", "Z–A"];
+  const sortOptions = ["Price", "Status", "A–Z", "Z–A", "Newest", "Oldest"];
+  const showingSortOptions = ["Date", "Price", "A–Z", "Z–A", "Newest", "Oldest"];
 
   return (
     <>
@@ -1154,6 +1168,49 @@ export default function App() {
 
         {/* MAIN CONTENT */}
         <main style={{ padding: isMobile ? "20px" : "30px 60px", maxWidth: 1300, margin: "0 auto" }}>
+          {/* SEARCH */}
+          <div style={{ marginBottom: 24, position: "relative" }}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search address, realtor, or notes…"
+              maxLength={100}
+              style={{
+                width: "100%",
+                padding: isMobile ? "10px 36px 10px 14px" : "12px 40px 12px 18px",
+                borderRadius: 63,
+                border: "1px solid #000",
+                background: "#fff",
+                fontFamily: "'DM Sans', sans-serif",
+                fontSize: isMobile ? 14 : 16,
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                aria-label="Clear search"
+                style={{
+                  position: "absolute",
+                  right: isMobile ? 12 : 16,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#666",
+                  padding: 4,
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                {icons.close(16)}
+              </button>
+            )}
+          </div>
+
           {/* SHOWINGS SECTION */}
           <section style={{ marginBottom: 40 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: showingsOpen ? 12 : 0 }}>
@@ -1171,7 +1228,7 @@ export default function App() {
                   <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 15, color: "#888", padding: "20px 0", borderTop: "1px solid #000" }}>Loading…</p>
                 ) : sortedShowings.length === 0 ? (
                   <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 15, color: "#888", padding: "20px 0", borderTop: "1px solid #000" }}>
-                    No upcoming showings. Change a listing's status to "Schedule?" to add one.
+                    {q ? `No showings match "${searchQuery}".` : "No upcoming showings. Change a listing's status to \"Schedule?\" to add one."}
                   </p>
                 ) : (
                   sortedShowings.map((l) => (
@@ -1199,7 +1256,7 @@ export default function App() {
                   <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 15, color: "#888", padding: "20px 0", borderTop: "1px solid #000" }}>Loading…</p>
                 ) : sortedListings.length === 0 ? (
                   <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 15, color: "#888", padding: "20px 0", borderTop: "1px solid #000" }}>
-                    No listings yet. Use the Chrome extension to save your first listing!
+                    {q ? `No listings match "${searchQuery}".` : "No listings yet. Use the Chrome extension to save your first listing!"}
                   </p>
                 ) : (
                   sortedListings.map((l) => (
