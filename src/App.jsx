@@ -959,22 +959,36 @@ function SettingsScreen({ onClose, destinations, setDestinations, isMobile, user
         </div>
         <h3 style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 18, margin: "0 0 14px" }}>Commute destinations</h3>
         <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 14, color: "#666", margin: "0 0 16px" }}>
-          Add places you commute to regularly. Commute times will be calculated for each listing.
+          Add places you commute to regularly. Each listing will get a tappable chip per destination that opens Google Maps with directions.
         </p>
         {destinations.map((d) => (
-          <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", border: "1px solid #ddd", borderRadius: 8, marginBottom: 8, background: "#fff" }}>
-            <div>
+          <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "10px 14px", border: "1px solid #ddd", borderRadius: 8, marginBottom: 8, background: "#fff" }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 15 }}>{d.name}</div>
-              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: "#888" }}>{d.address}</div>
+              <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: "#888", overflow: "hidden", textOverflow: "ellipsis" }}>{d.address}</div>
             </div>
-            <button onClick={() => removeDestination(d.id)} style={{ background: "none", border: "none", color: "#a33", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
-              Remove
-            </button>
+            <div style={{ display: "flex", gap: 12, flexShrink: 0 }}>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(d.address)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: "var(--navy)", fontFamily: "'DM Sans', sans-serif", fontSize: 13, textDecoration: "none", whiteSpace: "nowrap" }}
+                title="Open in Google Maps to confirm this is the right place"
+              >
+                Verify ↗
+              </a>
+              <button onClick={() => removeDestination(d.id)} style={{ background: "none", border: "none", color: "#a33", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
+                Remove
+              </button>
+            </div>
           </div>
         ))}
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 12 }}>
           <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Name (e.g. Work)" maxLength={60} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #ccc", fontFamily: "'DM Sans', sans-serif", fontSize: 14 }} />
-          <input value={newAddr} onChange={(e) => setNewAddr(e.target.value)} placeholder="Address" maxLength={200} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #ccc", fontFamily: "'DM Sans', sans-serif", fontSize: 14 }} />
+          <input value={newAddr} onChange={(e) => setNewAddr(e.target.value)} placeholder="Full address (street, city, state, zip)" maxLength={200} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #ccc", fontFamily: "'DM Sans', sans-serif", fontSize: 14 }} />
+          <p style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: "#888", margin: 0 }}>
+            Tip: include the city and state. Plain "200 Hudson" could resolve to NYC or NJ. Use the Verify link to double-check after saving.
+          </p>
           {error && <p style={{ color: "#c33", fontSize: 13, margin: 0 }}>{error}</p>}
           <button onClick={addDestination} style={{ padding: "8px 16px", background: "var(--navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, cursor: "pointer", alignSelf: "flex-start" }}>
             + Add destination
