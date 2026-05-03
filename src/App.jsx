@@ -795,8 +795,8 @@ function SortDropdown({ value, onChange, options, isMobile }) {
           gap: 6,
           padding: isMobile ? "4px 12px" : "8px 16px",
           borderRadius: 63,
-          background: "var(--navy)",
-          color: "#fff",
+          background: "var(--orange)",
+          color: "#000",
           border: "none",
           fontFamily: "'DM Sans', sans-serif",
           fontWeight: 500,
@@ -1115,14 +1115,16 @@ export default function App() {
     if (sort === "Price") sorted.sort((a, b) => (a.price || 0) - (b.price || 0));
     else if (sort === "Status") sorted.sort((a, b) => (a.status || "").localeCompare(b.status || ""));
     else if (sort === "Date") sorted.sort((a, b) => (a.showing_date || "").localeCompare(b.showing_date || ""));
+    else if (sort === "A–Z") sorted.sort((a, b) => (a.address || "").localeCompare(b.address || ""));
+    else if (sort === "Z–A") sorted.sort((a, b) => (b.address || "").localeCompare(a.address || ""));
     return sorted;
   }
 
   const sortedShowings = sortListings(showings, showingSort);
   const sortedListings = sortListings(regularListings, listingSort);
 
-  const sortOptions = ["Price", "Status"];
-  const showingSortOptions = ["Date", "Price"];
+  const sortOptions = ["Price", "Status", "A–Z", "Z–A"];
+  const showingSortOptions = ["Date", "Price", "A–Z", "Z–A"];
 
   return (
     <>
