@@ -4,8 +4,8 @@
 const SUPABASE_URL = 'https://xwqnvkkqzjgvfkalljcx.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_YdHGsGKjfxiERm7it8h1rA_Z1H--xQt';
 
-// Initialize Supabase client
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+// Initialize Supabase client (renamed to avoid collision with global `supabase` from supabase.js)
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ============================================
 // DOM ELEMENTS
@@ -48,7 +48,7 @@ const templateStatus = document.getElementById('template-status');
 
 // Check if user is already logged in when popup opens
 async function checkAuth() {
-  const { data: { session } } = await supabase.auth.getSession();
+  const { data: { session } } = await sb.auth.getSession();
   if (session) {
     showMainScreen();
   } else {
@@ -78,7 +78,7 @@ signInBtn.addEventListener('click', async () => {
     return;
   }
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await sb.auth.signInWithPassword({ email, password });
   if (error) {
     authError.textContent = error.message;
   } else {
@@ -101,7 +101,7 @@ signUpBtn.addEventListener('click', async () => {
     return;
   }
 
-  const { error } = await supabase.auth.signUp({ email, password });
+  const { error } = await sb.auth.signUp({ email, password });
   if (error) {
     authError.textContent = error.message;
   } else {
@@ -111,7 +111,7 @@ signUpBtn.addEventListener('click', async () => {
 });
 
 signOutBtn.addEventListener('click', async () => {
-  await supabase.auth.signOut();
+  await sb.auth.signOut();
   showAuthScreen();
 });
 
@@ -148,6 +148,14 @@ function grabCurrentTabUrl() {
     // Fallback for testing outside of Chrome extension context
     urlField.value = window.location.href;
   }
+}
+
+// Side panel stays open across tab switches — keep the URL field in sync.
+if (typeof chrome !== 'undefined' && chrome.tabs) {
+  chrome.tabs.onActivated.addListener(grabCurrentTabUrl);
+  chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
+    if (changeInfo.url && tab.active) grabCurrentTabUrl();
+  });
 }
 
 // ============================================
@@ -197,19 +205,59 @@ saveBtn.addEventListener('click', async () => {
   saveBtn.disabled = true;
   saveBtn.textContent = 'Saving...';
 
-  const { error } = await supabase.from('listings').insert([listing]);
+  const { data: inserted, error } = await sb.from('listings').insert([listing]).select();
 
   if (error) {
     showSaveStatus('Error: ' + error.message, 'error');
-  } else {
-    showSaveStatus('Listing saved!', 'success');
-    // Clear form after short delay so user sees the success message
-    setTimeout(clearForm, 1500);
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save listing';
+    return;
   }
+
+  showSaveStatus('Listing saved! Computing commutes…', 'success');
+
+  // Fan out: compute commutes for this new listing across all destinations.
+  const newListing = inserted?.[0];
+  if (newListing && newListing.address) {
+    const { data: dests } = await sb.from('destinations').select('*');
+    if (Array.isArray(dests) && dests.length > 0) {
+      const inserts = [];
+      for (const d of dests) {
+        if (!d.address) continue;
+        const minutes = await fetchCommuteMinutes(newListing.address, d.address);
+        if (minutes != null) {
+          inserts.push({ listing_id: newListing.id, destination_id: d.id, duration_minutes: minutes });
+        }
+      }
+      if (inserts.length > 0) {
+        await sb.from('commutes').insert(inserts);
+      }
+    }
+  }
+
+  showSaveStatus('Listing saved!', 'success');
+  setTimeout(clearForm, 1500);
 
   saveBtn.disabled = false;
   saveBtn.textContent = 'Save listing';
 });
+
+// Call the deployed Vercel function to fetch transit time. Returns null on any failure.
+async function fetchCommuteMinutes(origin, destination) {
+  if (!origin || !destination) return null;
+  try {
+    const r = await fetch('https://artemis-apts.vercel.app/api/commute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ origin, destination }),
+    });
+    if (!r.ok) return null;
+    const { duration_minutes } = await r.json();
+    return typeof duration_minutes === 'number' ? duration_minutes : null;
+  } catch {
+    return null;
+  }
+}
 
 function showSaveStatus(message, type) {
   saveStatus.textContent = message;

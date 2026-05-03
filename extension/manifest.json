@@ -1,14 +1,20 @@
 {
   "manifest_version": 3,
   "name": "Apartment Tracker",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Capture apartment listings while browsing and save them to your tracker.",
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "sidePanel"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
+  },
   "action": {
-    "default_popup": "popup.html",
     "default_title": "Save this listing"
   }
 }
