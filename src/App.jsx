@@ -19,50 +19,6 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   },
 });
 
-// Ask the Vercel function for a transit time in minutes between two addresses.
-// Returns null on any failure so callers can skip silently per pair.
-async function fetchCommuteMinutes(origin, destination) {
-  if (!origin || !destination) return null;
-  try {
-    const r = await fetch("/api/commute", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ origin, destination }),
-    });
-    if (!r.ok) return null;
-    const { duration_minutes } = await r.json();
-    return typeof duration_minutes === "number" ? duration_minutes : null;
-  } catch {
-    return null;
-  }
-}
-
-// Compute commute rows for one (newly added) destination across all listings,
-// or one (newly added) listing across all destinations. Either side can be a
-// single object; the other side is the list to fan out across.
-async function computeAndSaveCommutes({ listing, destination, listings, destinations }) {
-  const pairs = [];
-  if (listing && destinations) {
-    for (const d of destinations) pairs.push({ listing, destination: d });
-  } else if (destination && listings) {
-    for (const l of listings) pairs.push({ listing: l, destination });
-  }
-  const inserts = [];
-  for (const { listing: l, destination: d } of pairs) {
-    if (!l.address || !d.address) continue;
-    const minutes = await fetchCommuteMinutes(l.address, d.address);
-    if (minutes == null) continue;
-    inserts.push({ listing_id: l.id, destination_id: d.id, duration_minutes: minutes });
-  }
-  if (inserts.length === 0) return [];
-  const { data, error } = await supabase.from("commutes").insert(inserts).select();
-  if (error) {
-    console.error("commute insert failed:", error);
-    return [];
-  }
-  return data ?? [];
-}
-
 // ============================================
 // ICONS (SVG)
 // ============================================
@@ -349,7 +305,7 @@ function StatusDropdown({ value, onChange, showSchedule = true }) {
 // ============================================
 // COMMUTE CHIP
 // ============================================
-function CommuteChip({ name, minutes, listingAddress, destAddress }) {
+function CommuteChip({ name, listingAddress, destAddress }) {
   const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(listingAddress)}&destination=${encodeURIComponent(destAddress)}&travelmode=transit`;
   return (
     <a
@@ -359,7 +315,7 @@ function CommuteChip({ name, minutes, listingAddress, destAddress }) {
       style={{
         display: "inline-flex",
         alignItems: "center",
-        gap: 5,
+        gap: 4,
         padding: "4px 12px",
         borderRadius: 63,
         border: "0.5px solid #000",
@@ -371,9 +327,8 @@ function CommuteChip({ name, minutes, listingAddress, destAddress }) {
         whiteSpace: "nowrap",
       }}
     >
-      <span style={{ fontWeight: 300 }}>{name}</span>
-      <span style={{ fontWeight: 300 }}>|</span>
-      <span style={{ fontWeight: 700 }}>{minutes}min</span>
+      <span style={{ fontWeight: 500 }}>{name}</span>
+      <span style={{ fontWeight: 300, opacity: 0.6 }}>↗</span>
     </a>
   );
 }
@@ -381,7 +336,7 @@ function CommuteChip({ name, minutes, listingAddress, destAddress }) {
 // ============================================
 // LISTING ITEM COMPONENT
 // ============================================
-function ListingItem({ listing, commutes, destinations, onStatusChange, onDelete, isMobile }) {
+function ListingItem({ listing, destinations, onStatusChange, onDelete, isMobile }) {
   const [realtorOpen, setRealtorOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -413,7 +368,6 @@ function ListingItem({ listing, commutes, destinations, onStatusChange, onDelete
     onDelete(listing.id);
   }
 
-  const listingCommutes = commutes.filter((c) => c.listing_id === listing.id);
 
   if (isMobile) {
     return (
@@ -454,18 +408,14 @@ function ListingItem({ listing, commutes, destinations, onStatusChange, onDelete
           >
             <IconCircle icon="map" size={30} iconSize={16} />
           </a>
-          {listingCommutes.map((c) => {
-            const dest = destinations.find((d) => d.id === c.destination_id);
-            return (
-              <CommuteChip
-                key={c.id}
-                name={dest?.name || "?"}
-                minutes={c.duration_minutes}
-                listingAddress={listing.address || ""}
-                destAddress={dest?.address || ""}
-              />
-            );
-          })}
+          {destinations.map((dest) => (
+            <CommuteChip
+              key={dest.id}
+              name={dest.name}
+              listingAddress={listing.address || ""}
+              destAddress={dest.address || ""}
+            />
+          ))}
         </div>
         <RealtorPopover listing={listing} isOpen={realtorOpen} onClose={() => setRealtorOpen(false)} />
         <NotesPopover notes={notesText} setNotes={setNotesText} isOpen={notesOpen} onClose={() => setNotesOpen(false)} onSave={saveNotes} />
@@ -523,18 +473,14 @@ function ListingItem({ listing, commutes, destinations, onStatusChange, onDelete
           <IconCircle icon="map" size={38} iconSize={18} />
         </a>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-          {listingCommutes.map((c) => {
-            const dest = destinations.find((d) => d.id === c.destination_id);
-            return (
-              <CommuteChip
-                key={c.id}
-                name={dest?.name || "?"}
-                minutes={c.duration_minutes}
-                listingAddress={listing.address || ""}
-                destAddress={dest?.address || ""}
-              />
-            );
-          })}
+          {destinations.map((dest) => (
+            <CommuteChip
+              key={dest.id}
+              name={dest.name}
+              listingAddress={listing.address || ""}
+              destAddress={dest.address || ""}
+            />
+          ))}
         </div>
       </div>
       <RealtorPopover listing={listing} isOpen={realtorOpen} onClose={() => setRealtorOpen(false)} />
@@ -548,7 +494,7 @@ function ListingItem({ listing, commutes, destinations, onStatusChange, onDelete
 // ============================================
 // SHOWING ITEM COMPONENT
 // ============================================
-function ShowingItem({ listing, commutes, destinations, onKebabAction, onReschedule, onDelete, isMobile }) {
+function ShowingItem({ listing, destinations, onKebabAction, onReschedule, onDelete, isMobile }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [realtorOpen, setRealtorOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
@@ -588,7 +534,6 @@ function ShowingItem({ listing, commutes, destinations, onKebabAction, onResched
     ? new Date("2000-01-01T" + listing.showing_time).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
     : "";
 
-  const listingCommutes = commutes.filter((c) => c.listing_id === listing.id);
 
   const kebabMenu = (
     <div ref={menuRef} style={{ position: "relative" }}>
@@ -676,10 +621,9 @@ function ShowingItem({ listing, commutes, destinations, onKebabAction, onResched
           <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(listing.address || "")}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
             <IconCircle icon="map" size={30} iconSize={16} />
           </a>
-          {listingCommutes.map((c) => {
-            const dest = destinations.find((d) => d.id === c.destination_id);
-            return <CommuteChip key={c.id} name={dest?.name || "?"} minutes={c.duration_minutes} listingAddress={listing.address || ""} destAddress={dest?.address || ""} />;
-          })}
+          {destinations.map((dest) => (
+            <CommuteChip key={dest.id} name={dest.name} listingAddress={listing.address || ""} destAddress={dest.address || ""} />
+          ))}
         </div>
         <RealtorPopover listing={listing} isOpen={realtorOpen} onClose={() => setRealtorOpen(false)} />
         <NotesPopover notes={notesText} setNotes={setNotesText} isOpen={notesOpen} onClose={() => setNotesOpen(false)} onSave={saveNotes} />
@@ -722,10 +666,9 @@ function ShowingItem({ listing, commutes, destinations, onKebabAction, onResched
               <IconCircle icon="map" size={38} iconSize={18} />
             </a>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {listingCommutes.map((c) => {
-                const dest = destinations.find((d) => d.id === c.destination_id);
-                return <CommuteChip key={c.id} name={dest?.name || "?"} minutes={c.duration_minutes} listingAddress={listing.address || ""} destAddress={dest?.address || ""} />;
-              })}
+              {destinations.map((dest) => (
+                <CommuteChip key={dest.id} name={dest.name} listingAddress={listing.address || ""} destAddress={dest.address || ""} />
+              ))}
             </div>
           </div>
         </div>
@@ -971,11 +914,10 @@ function AuthScreen({ onAuth }) {
 // ============================================
 // SETTINGS SCREEN
 // ============================================
-function SettingsScreen({ onClose, destinations, setDestinations, isMobile, user, listings, setCommutes }) {
+function SettingsScreen({ onClose, destinations, setDestinations, isMobile, user }) {
   const [newName, setNewName] = useState("");
   const [newAddr, setNewAddr] = useState("");
   const [error, setError] = useState("");
-  const [computing, setComputing] = useState(false);
 
   async function addDestination() {
     setError("");
@@ -1001,23 +943,11 @@ function SettingsScreen({ onClose, destinations, setDestinations, isMobile, user
     if (data) setDestinations((prev) => [...prev, ...data]);
     setNewName("");
     setNewAddr("");
-
-    // Fan out: compute commutes for this new destination across all existing listings.
-    const newDest = data?.[0];
-    if (newDest && listings.length > 0) {
-      setComputing(true);
-      const newRows = await computeAndSaveCommutes({ destination: newDest, listings });
-      if (newRows.length > 0) setCommutes((prev) => [...prev, ...newRows]);
-      setComputing(false);
-    }
   }
 
   async function removeDestination(id) {
-    // Cascade: clean up commute rows for this destination too.
-    await supabase.from("commutes").delete().eq("destination_id", id);
     await supabase.from("destinations").delete().eq("id", id);
     setDestinations((prev) => prev.filter((d) => d.id !== id));
-    setCommutes((prev) => prev.filter((c) => c.destination_id !== id));
   }
 
   return (
@@ -1046,8 +976,7 @@ function SettingsScreen({ onClose, destinations, setDestinations, isMobile, user
           <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Name (e.g. Work)" maxLength={60} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #ccc", fontFamily: "'DM Sans', sans-serif", fontSize: 14 }} />
           <input value={newAddr} onChange={(e) => setNewAddr(e.target.value)} placeholder="Address" maxLength={200} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #ccc", fontFamily: "'DM Sans', sans-serif", fontSize: 14 }} />
           {error && <p style={{ color: "#c33", fontSize: 13, margin: 0 }}>{error}</p>}
-          {computing && <p style={{ color: "var(--navy)", fontSize: 13, margin: 0 }}>Computing commute times for existing listings…</p>}
-          <button onClick={addDestination} disabled={computing} style={{ padding: "8px 16px", background: "var(--navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, cursor: computing ? "wait" : "pointer", opacity: computing ? 0.6 : 1, alignSelf: "flex-start" }}>
+          <button onClick={addDestination} style={{ padding: "8px 16px", background: "var(--navy)", color: "#fff", border: "none", borderRadius: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, cursor: "pointer", alignSelf: "flex-start" }}>
             + Add destination
           </button>
         </div>
@@ -1077,7 +1006,6 @@ export default function App() {
   const [dataLoading, setDataLoading] = useState(false);
   const [hasFetched, setHasFetched] = useState(false);
   const [listings, setListings] = useState([]);
-  const [commutes, setCommutes] = useState([]);
   const [destinations, setDestinations] = useState([]);
   const [showingsOpen, setShowingsOpen] = useState(true);
   const [listingsOpen, setListingsOpen] = useState(true);
@@ -1110,16 +1038,13 @@ export default function App() {
     if (!user) return;
     setDataLoading(true);
     try {
-      const [l, c, d] = await Promise.all([
+      const [l, d] = await Promise.all([
         supabase.from("listings").select("*"),
-        supabase.from("commutes").select("*"),
         supabase.from("destinations").select("*"),
       ]);
       if (l.error) throw l.error;
-      if (c.error) throw c.error;
       if (d.error) throw d.error;
       setListings(l.data ?? []);
-      setCommutes(c.data ?? []);
       setDestinations(d.data ?? []);
     } catch (err) {
       console.error("Fetch error:", err);
@@ -1228,7 +1153,7 @@ export default function App() {
                   </p>
                 ) : (
                   sortedShowings.map((l) => (
-                    <ShowingItem key={l.id} listing={l} commutes={commutes} destinations={destinations} onKebabAction={handleKebabAction} onReschedule={handleReschedule} onDelete={handleDelete} isMobile={isMobile} />
+                    <ShowingItem key={l.id} listing={l} destinations={destinations} onKebabAction={handleKebabAction} onReschedule={handleReschedule} onDelete={handleDelete} isMobile={isMobile} />
                   ))
                 )}
               </div>
@@ -1256,7 +1181,7 @@ export default function App() {
                   </p>
                 ) : (
                   sortedListings.map((l) => (
-                    <ListingItem key={l.id} listing={l} commutes={commutes} destinations={destinations} onStatusChange={handleStatusChange} onDelete={handleDelete} isMobile={isMobile} />
+                    <ListingItem key={l.id} listing={l} destinations={destinations} onStatusChange={handleStatusChange} onDelete={handleDelete} isMobile={isMobile} />
                   ))
                 )}
               </div>
@@ -1265,7 +1190,7 @@ export default function App() {
         </main>
       </div>
 
-      {settingsOpen && <SettingsScreen onClose={() => { setSettingsOpen(false); fetchData(); }} destinations={destinations} setDestinations={setDestinations} isMobile={isMobile} user={user} listings={listings} setCommutes={setCommutes} />}
+      {settingsOpen && <SettingsScreen onClose={() => { setSettingsOpen(false); fetchData(); }} destinations={destinations} setDestinations={setDestinations} isMobile={isMobile} user={user} />}
     </>
   );
 }

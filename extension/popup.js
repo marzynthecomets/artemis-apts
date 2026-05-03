@@ -205,59 +205,18 @@ saveBtn.addEventListener('click', async () => {
   saveBtn.disabled = true;
   saveBtn.textContent = 'Saving...';
 
-  const { data: inserted, error } = await sb.from('listings').insert([listing]).select();
+  const { error } = await sb.from('listings').insert([listing]);
 
   if (error) {
     showSaveStatus('Error: ' + error.message, 'error');
-    saveBtn.disabled = false;
-    saveBtn.textContent = 'Save listing';
-    return;
+  } else {
+    showSaveStatus('Listing saved!', 'success');
+    setTimeout(clearForm, 1500);
   }
-
-  showSaveStatus('Listing saved! Computing commutes…', 'success');
-
-  // Fan out: compute commutes for this new listing across all destinations.
-  const newListing = inserted?.[0];
-  if (newListing && newListing.address) {
-    const { data: dests } = await sb.from('destinations').select('*');
-    if (Array.isArray(dests) && dests.length > 0) {
-      const inserts = [];
-      for (const d of dests) {
-        if (!d.address) continue;
-        const minutes = await fetchCommuteMinutes(newListing.address, d.address);
-        if (minutes != null) {
-          inserts.push({ listing_id: newListing.id, destination_id: d.id, duration_minutes: minutes });
-        }
-      }
-      if (inserts.length > 0) {
-        await sb.from('commutes').insert(inserts);
-      }
-    }
-  }
-
-  showSaveStatus('Listing saved!', 'success');
-  setTimeout(clearForm, 1500);
 
   saveBtn.disabled = false;
   saveBtn.textContent = 'Save listing';
 });
-
-// Call the deployed Vercel function to fetch transit time. Returns null on any failure.
-async function fetchCommuteMinutes(origin, destination) {
-  if (!origin || !destination) return null;
-  try {
-    const r = await fetch('https://artemis-apts.vercel.app/api/commute', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ origin, destination }),
-    });
-    if (!r.ok) return null;
-    const { duration_minutes } = await r.json();
-    return typeof duration_minutes === 'number' ? duration_minutes : null;
-  } catch {
-    return null;
-  }
-}
 
 function showSaveStatus(message, type) {
   saveStatus.textContent = message;
