@@ -89,6 +89,12 @@ const icons = {
   ),
 };
 
+function formatBedrooms(n) {
+  if (n == null) return "—";
+  if (n === 0) return "Studio";
+  return `${n} bed`;
+}
+
 function IconCircle({ icon, bg = "var(--navy)", size = 38, iconSize = 20 }) {
   return (
     <div
@@ -395,7 +401,7 @@ function ListingItem({ listing, destinations, onStatusChange, onDelete, isMobile
             </a>
             <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 18 }}>${listing.price?.toLocaleString() || "—"}</span>
             <span style={{ borderLeft: "1px solid #000", paddingLeft: 10, fontFamily: "'DM Sans', sans-serif", fontSize: 18 }}>
-              {listing.bedrooms != null ? `${listing.bedrooms} bed` : "—"}
+              {formatBedrooms(listing.bedrooms)}
             </span>
           </div>
         </div>
@@ -461,7 +467,7 @@ function ListingItem({ listing, destinations, onStatusChange, onDelete, isMobile
         <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 20, width: 80 }}>${listing.price?.toLocaleString() || "—"}</span>
       </div>
       <div style={{ borderLeft: "1px solid #000", paddingLeft: 14, fontFamily: "'DM Sans', sans-serif", fontSize: 20, width: 65, flexShrink: 0 }}>
-        {listing.bedrooms != null ? `${listing.bedrooms} bed` : "—"}
+        {formatBedrooms(listing.bedrooms)}
       </div>
       <div style={{ borderLeft: "1px solid #000", paddingLeft: 16, display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
         <a
@@ -613,7 +619,7 @@ function ShowingItem({ listing, destinations, onKebabAction, onReschedule, onDel
             </a>
             <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 16 }}>${listing.price?.toLocaleString() || "—"}</span>
             <span style={{ borderLeft: "1px solid #000", paddingLeft: 10, fontFamily: "'DM Sans', sans-serif", fontSize: 16 }}>
-              {listing.bedrooms != null ? `${listing.bedrooms} bed` : "—"}
+              {formatBedrooms(listing.bedrooms)}
             </span>
           </div>
         </div>
@@ -659,7 +665,7 @@ function ShowingItem({ listing, destinations, onKebabAction, onReschedule, onDel
             <span style={{ fontFamily: "'DM Sans', sans-serif", fontSize: 20, width: 80 }}>${listing.price?.toLocaleString() || "—"}</span>
           </div>
           <div style={{ borderLeft: "1px solid #000", paddingLeft: 14, fontFamily: "'DM Sans', sans-serif", fontSize: 20, width: 65 }}>
-            {listing.bedrooms != null ? `${listing.bedrooms} bed` : "—"}
+            {formatBedrooms(listing.bedrooms)}
           </div>
           <div style={{ borderLeft: "1px solid #000", paddingLeft: 16, display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
             <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(listing.address || "")}`} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0 }}>
