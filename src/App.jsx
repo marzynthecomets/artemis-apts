@@ -1028,24 +1028,14 @@ function GroupsSection({ user, groups, pendingInvites, onAcceptInvite, onDecline
     }
     setBusy(true);
     try {
-      // Read the live session user id directly so we never insert a stale id
-      // from React state (which can lag behind a token refresh).
-      const { data: { user: liveUser } } = await supabase.auth.getUser();
-      const createdBy = liveUser?.id;
-      if (!createdBy) throw new Error("Not signed in.");
-      const { data: groupRows, error: gErr } = await supabase
-        .from("groups").insert([{ name, created_by: createdBy }]).select();
-      if (gErr) throw gErr;
-      const group = groupRows?.[0];
-      if (!group) throw new Error("Group create failed.");
-      // Add creator as the active owner member.
-      const { error: mErr } = await supabase.from("group_members").insert([
-        { group_id: group.id, user_id: createdBy, role: "owner", status: "active" },
-      ]);
-      if (mErr) throw mErr;
+      // Use the SECURITY DEFINER RPC so the group + owner-membership inserts
+      // are atomic and bypass the RLS WITH CHECK quirks we hit on direct insert.
+      const { data: groupId, error: rpcErr } = await supabase.rpc("create_group", { p_name: name });
+      if (rpcErr) throw rpcErr;
+      if (!groupId) throw new Error("Group create failed.");
       setNewGroupName("");
       await onGroupsChange();
-      onSwitchView({ id: group.id, name: group.name });
+      onSwitchView({ id: groupId, name });
     } catch (err) {
       setError(err.message);
     } finally {
