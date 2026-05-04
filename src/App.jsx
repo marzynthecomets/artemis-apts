@@ -1028,14 +1028,19 @@ function GroupsSection({ user, groups, pendingInvites, onAcceptInvite, onDecline
     }
     setBusy(true);
     try {
+      // Read the live session user id directly so we never insert a stale id
+      // from React state (which can lag behind a token refresh).
+      const { data: { user: liveUser } } = await supabase.auth.getUser();
+      const createdBy = liveUser?.id;
+      if (!createdBy) throw new Error("Not signed in.");
       const { data: groupRows, error: gErr } = await supabase
-        .from("groups").insert([{ name, created_by: user.id }]).select();
+        .from("groups").insert([{ name, created_by: createdBy }]).select();
       if (gErr) throw gErr;
       const group = groupRows?.[0];
       if (!group) throw new Error("Group create failed.");
       // Add creator as the active owner member.
       const { error: mErr } = await supabase.from("group_members").insert([
-        { group_id: group.id, user_id: user.id, role: "owner", status: "active" },
+        { group_id: group.id, user_id: createdBy, role: "owner", status: "active" },
       ]);
       if (mErr) throw mErr;
       setNewGroupName("");
