@@ -860,6 +860,160 @@ function NotesPopover({ notes, setNotes, isOpen, onClose, onSave }) {
 }
 
 // ============================================
+// ADD LISTING POPOVER (web app dashboard "+ Add listing" button)
+// ============================================
+function AddListingPopover({ isOpen, onClose, onSaved, currentView, groupRequirements = [] }) {
+  const [url, setUrl] = useState("");
+  const [address, setAddress] = useState("");
+  const [price, setPrice] = useState("");
+  const [bedrooms, setBedrooms] = useState("");
+  const [realtorName, setRealtorName] = useState("");
+  const [realtorContact, setRealtorContact] = useState("");
+  const [status, setStatus] = useState("Interested");
+  const [showingDate, setShowingDate] = useState("");
+  const [showingTime, setShowingTime] = useState("");
+  const [notes, setNotes] = useState("");
+  const [checkedReqs, setCheckedReqs] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  function reset() {
+    setUrl(""); setAddress(""); setPrice(""); setBedrooms("");
+    setRealtorName(""); setRealtorContact(""); setStatus("Interested");
+    setShowingDate(""); setShowingTime(""); setNotes("");
+    setCheckedReqs({}); setError("");
+  }
+
+  useEffect(() => { if (isOpen) reset(); }, [isOpen]);
+
+  async function handleSave(e) {
+    e.preventDefault();
+    setError("");
+    if (!url.trim()) { setError("URL is required."); return; }
+    if (status === "Scheduled" && (!showingDate || !showingTime)) {
+      setError("Pick a showing date and time, or change the status.");
+      return;
+    }
+    const priceNum = price === "" ? null : parseInt(price, 10);
+    if (price !== "" && (isNaN(priceNum) || priceNum < 0)) {
+      setError("Price must be a positive number."); return;
+    }
+    const payload = {
+      url: url.trim(),
+      address: address.trim() || null,
+      price: priceNum,
+      bedrooms: bedrooms === "" ? null : parseInt(bedrooms, 10),
+      realtor_name: realtorName.trim() || null,
+      realtor_contact: realtorContact.trim() || null,
+      status,
+      notes: notes.trim() || null,
+      showing_date: status === "Scheduled" ? showingDate : null,
+      showing_time: status === "Scheduled" ? showingTime : null,
+      group_id: currentView?.id ?? null,
+    };
+    setBusy(true);
+    const { data, error: err } = await supabase.from("listings").insert([payload]).select();
+    if (err) { setError(err.message); setBusy(false); return; }
+    const newListing = data?.[0];
+    // Group mode: write any checked requirement rows.
+    if (newListing && currentView && groupRequirements.length > 0) {
+      const rows = Object.entries(checkedReqs)
+        .filter(([, v]) => v)
+        .map(([reqId]) => ({ listing_id: newListing.id, requirement_id: reqId, met: true }));
+      if (rows.length > 0) {
+        const { error: rErr } = await supabase.from("listing_requirements").insert(rows);
+        if (rErr) console.error("listing_requirements insert failed:", rErr);
+      }
+    }
+    setBusy(false);
+    onSaved();
+    onClose();
+  }
+
+  const inputStyle = { width: "100%", padding: "8px 10px", borderRadius: 6, border: "1px solid #ccc", fontFamily: "'DM Sans', sans-serif", fontSize: 14, boxSizing: "border-box" };
+  const labelStyle = { display: "flex", flexDirection: "column", gap: 4, fontFamily: "'DM Sans', sans-serif", fontSize: 12, color: "#555", textTransform: "uppercase", letterSpacing: "0.03em", fontWeight: 500 };
+
+  return (
+    <Popover isOpen={isOpen} onClose={onClose} style={{ background: "#fff", color: "#000", border: "2px solid #FF8C20", maxHeight: "85vh", overflowY: "auto", width: "min(440px, 90vw)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+        <span style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: 22, color: "var(--navy)" }}>
+          Add listing {currentView ? <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 400, fontSize: 14, color: "#888" }}>· {currentView.name}</span> : <span style={{ fontFamily: "'DM Sans', sans-serif", fontWeight: 400, fontSize: 14, color: "#888" }}>· Personal</span>}
+        </span>
+      </div>
+      <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <label style={labelStyle}>Listing URL
+          <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} maxLength={500} placeholder="https://streeteasy.com/..." style={inputStyle} />
+        </label>
+        <label style={labelStyle}>Address
+          <input type="text" value={address} onChange={(e) => setAddress(e.target.value)} maxLength={200} placeholder="123 Main St, Brooklyn, NY" style={inputStyle} />
+        </label>
+        <div style={{ display: "flex", gap: 10 }}>
+          <label style={{ ...labelStyle, flex: 1 }}>Price
+            <input type="number" min="0" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="2500" style={inputStyle} />
+          </label>
+          <label style={{ ...labelStyle, flex: 1 }}>Beds
+            <select value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} style={inputStyle}>
+              <option value="">—</option>
+              <option value="0">Studio</option>
+              <option value="1">1 bed</option>
+              <option value="2">2 bed</option>
+              <option value="3">3 bed</option>
+              <option value="4">4 bed</option>
+              <option value="5">5+ bed</option>
+            </select>
+          </label>
+        </div>
+        <label style={labelStyle}>Realtor name
+          <input type="text" value={realtorName} onChange={(e) => setRealtorName(e.target.value)} maxLength={100} style={inputStyle} />
+        </label>
+        <label style={labelStyle}>Realtor contact
+          <input type="text" value={realtorContact} onChange={(e) => setRealtorContact(e.target.value)} maxLength={200} placeholder="Phone or email" style={inputStyle} />
+        </label>
+        <label style={labelStyle}>Status
+          <select value={status} onChange={(e) => setStatus(e.target.value)} style={inputStyle}>
+            <option>Interested</option>
+            <option>Contacted</option>
+            <option>Scheduled</option>
+            <option>Toured</option>
+          </select>
+        </label>
+        {status === "Scheduled" && (
+          <div style={{ display: "flex", gap: 10 }}>
+            <label style={{ ...labelStyle, flex: 1 }}>Showing date
+              <input type="date" value={showingDate} onChange={(e) => setShowingDate(e.target.value)} style={inputStyle} />
+            </label>
+            <label style={{ ...labelStyle, flex: 1 }}>Showing time
+              <input type="time" value={showingTime} onChange={(e) => setShowingTime(e.target.value)} style={inputStyle} />
+            </label>
+          </div>
+        )}
+        <label style={labelStyle}>Notes
+          <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={2000} style={{ ...inputStyle, resize: "vertical", textTransform: "none", letterSpacing: "normal" }} />
+        </label>
+        {currentView && groupRequirements.length > 0 && (
+          <div style={{ marginTop: 4 }}>
+            <div style={{ ...labelStyle, marginBottom: 6 }}>Requirements met</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: 10, background: "var(--bg)", borderRadius: 6 }}>
+              {groupRequirements.map((r) => (
+                <label key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'DM Sans', sans-serif", fontSize: 14, cursor: "pointer", textTransform: "none", letterSpacing: "normal" }}>
+                  <input type="checkbox" checked={!!checkedReqs[r.id]} onChange={(e) => setCheckedReqs((prev) => ({ ...prev, [r.id]: e.target.checked }))} style={{ width: 16, height: 16, cursor: "pointer" }} />
+                  {r.name}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+        {error && <p style={{ color: "#c33", fontSize: 13, margin: 0 }}>{error}</p>}
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 6 }}>
+          <button type="button" onClick={onClose} style={{ padding: "8px 16px", background: "transparent", color: "var(--navy)", border: "1px solid var(--navy)", borderRadius: 6, fontFamily: "'DM Sans', sans-serif", fontSize: 14, cursor: "pointer" }}>Cancel</button>
+          <button type="submit" disabled={busy} style={{ padding: "8px 18px", background: "var(--navy)", color: "#fff", border: "none", borderRadius: 6, fontFamily: "'DM Sans', sans-serif", fontSize: 14, fontWeight: 600, cursor: busy ? "wait" : "pointer", opacity: busy ? 0.6 : 1 }}>{busy ? "Saving…" : "Save listing"}</button>
+        </div>
+      </form>
+    </Popover>
+  );
+}
+
+// ============================================
 // SORT DROPDOWN
 // ============================================
 function SortDropdown({ value, onChange, options, isMobile }) {
@@ -1386,6 +1540,7 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [searchQuery, setSearchQuery] = useState("");
+  const [addListingOpen, setAddListingOpen] = useState(false);
   // Group hunting state. currentView = null → solo. currentView = {id,name} → that group.
   const [currentView, setCurrentView] = useState(null);
   const [groups, setGroups] = useState([]);
@@ -1724,7 +1879,7 @@ export default function App() {
 
           {/* LISTINGS SECTION */}
           <section>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: listingsOpen ? 12 : 0 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: listingsOpen ? 12 : 0, gap: 10, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                 <button onClick={() => setListingsOpen(!listingsOpen)} style={{ background: "none", border: "none", cursor: "pointer" }}>
                   {listingsOpen ? icons.minus() : icons.plus()}
@@ -1732,6 +1887,12 @@ export default function App() {
                 <h2 style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: isMobile ? 22 : 30, margin: 0 }}>Listings</h2>
                 <SortDropdown value={listingSort} onChange={setListingSort} options={sortOptions} isMobile={isMobile} />
               </div>
+              <button
+                onClick={() => setAddListingOpen(true)}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: isMobile ? "6px 14px" : "8px 18px", borderRadius: 63, background: "var(--navy)", color: "#fff", border: "none", fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: isMobile ? 13 : 15, cursor: "pointer" }}
+              >
+                + Add listing
+              </button>
             </div>
             {listingsOpen && (
               <div>
@@ -1768,6 +1929,14 @@ export default function App() {
           onSwitchView={(v) => { setCurrentView(v); setSettingsOpen(false); }}
         />
       )}
+
+      <AddListingPopover
+        isOpen={addListingOpen}
+        onClose={() => setAddListingOpen(false)}
+        onSaved={fetchData}
+        currentView={currentView}
+        groupRequirements={requirements}
+      />
     </>
   );
 }
