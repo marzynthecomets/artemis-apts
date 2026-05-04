@@ -1502,23 +1502,16 @@ export default function App() {
     handleStatusChange(id, "Scheduled", date, time);
   }
 
-  // Accept a pending invite: flip group_members.status to 'active'.
+  // Accept / decline are routed through SECURITY DEFINER RPCs so they
+  // operate on the JWT subject directly (no client-side uid mismatch risk).
   async function acceptInvite(groupId) {
-    await supabase
-      .from("group_members")
-      .update({ status: "active" })
-      .eq("group_id", groupId)
-      .eq("user_id", user.id);
+    const { error } = await supabase.rpc("accept_invite", { p_group_id: groupId });
+    if (error) console.error("accept_invite failed:", error);
     fetchGroups();
   }
-
-  // Decline a pending invite: delete the membership row.
   async function declineInvite(groupId) {
-    await supabase
-      .from("group_members")
-      .delete()
-      .eq("group_id", groupId)
-      .eq("user_id", user.id);
+    const { error } = await supabase.rpc("decline_invite", { p_group_id: groupId });
+    if (error) console.error("decline_invite failed:", error);
     fetchGroups();
   }
 
