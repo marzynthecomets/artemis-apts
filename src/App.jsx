@@ -649,7 +649,7 @@ function ShowingItem({ listing, destinations, onKebabAction, onReschedule, onDel
           <button onClick={() => { setMenuOpen(false); setNotesOpen(true); }} style={{ position: "absolute", top: 8, right: 8, background: "none", border: "none", cursor: "pointer" }}>
             {icons.close(16)}
           </button>
-          {["Add Notes", "Reschedule", "Cancel", "Delete Listing?"].map((action) => (
+          {["Add Notes", "Reschedule", "Tour complete?", "Cancel", "Delete Listing?"].map((action) => (
             <div
               key={action}
               onClick={() => {
@@ -1649,6 +1649,7 @@ export default function App() {
 
   function handleKebabAction(id, action) {
     if (action === "Cancel") handleStatusChange(id, "Contacted");
+    else if (action === "Tour complete?") handleStatusChange(id, "Toured");
   }
 
   function handleReschedule(id, date, time) {
@@ -1708,12 +1709,13 @@ export default function App() {
   function sortListings(list, sort) {
     const sorted = [...list];
     if (sort === "Price") sorted.sort((a, b) => (a.price || 0) - (b.price || 0));
-    else if (sort === "Status") sorted.sort((a, b) => (a.status || "").localeCompare(b.status || ""));
-    else if (sort === "Date") sorted.sort((a, b) => (a.showing_date || "").localeCompare(b.showing_date || ""));
+    else if (sort === "Date") sorted.sort((a, b) => {
+      const dateCmp = (a.showing_date || "").localeCompare(b.showing_date || "");
+      if (dateCmp !== 0) return dateCmp;
+      return (a.showing_time || "").localeCompare(b.showing_time || "");
+    });
     else if (sort === "A–Z") sorted.sort((a, b) => (a.address || "").localeCompare(b.address || ""));
     else if (sort === "Z–A") sorted.sort((a, b) => (b.address || "").localeCompare(a.address || ""));
-    else if (sort === "Newest") sorted.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
-    else if (sort === "Oldest") sorted.sort((a, b) => (a.created_at || "").localeCompare(b.created_at || ""));
     else if (sort === "Requirements") {
       const metCount = (id) => listingRequirements.filter((r) => r.listing_id === id && r.met).length;
       sorted.sort((a, b) => metCount(b.id) - metCount(a.id));
@@ -1722,10 +1724,13 @@ export default function App() {
   }
 
   const sortedShowings = sortListings(showings, showingSort);
-  const sortedListings = sortListings(regularListings, listingSort);
+  const listingsForSort = listingSort === "Toured"
+    ? regularListings.filter((l) => l.status === "Toured")
+    : regularListings;
+  const sortedListings = sortListings(listingsForSort, listingSort === "Toured" ? "Price" : listingSort);
 
-  const baseSortOptions = ["Price", "Status", "A–Z", "Z–A", "Newest", "Oldest"];
-  const baseShowingSortOptions = ["Date", "Price", "A–Z", "Z–A", "Newest", "Oldest"];
+  const baseSortOptions = ["Price", "A–Z", "Z–A", "Toured"];
+  const baseShowingSortOptions = ["Date", "Price", "A–Z", "Z–A"];
   const sortOptions = currentView ? [...baseSortOptions, "Requirements"] : baseSortOptions;
   const showingSortOptions = currentView ? [...baseShowingSortOptions, "Requirements"] : baseShowingSortOptions;
 
