@@ -1029,7 +1029,7 @@ function GroupsSection({ user, groups, pendingInvites, onAcceptInvite, onDecline
     setBusy(true);
     try {
       const { data: groupRows, error: gErr } = await supabase
-        .from("groups").insert([{ name }]).select();
+        .from("groups").insert([{ name, created_by: user.id }]).select();
       if (gErr) throw gErr;
       const group = groupRows?.[0];
       if (!group) throw new Error("Group create failed.");
