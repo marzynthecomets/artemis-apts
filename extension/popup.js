@@ -94,10 +94,16 @@ function showMainScreen() {
 // GROUPS & DYNAMIC TABS
 // ============================================
 async function loadGroupsAndTabs() {
-  // Fetch active group memberships for the signed-in user.
+  // Fetch active group memberships for the signed-in user only.
+  // RLS on group_members lets you also see other members of your own
+  // groups, so without a user_id filter we'd get one row per member
+  // and render duplicate tabs.
+  const { data: { user: liveUser } } = await sb.auth.getUser();
+  if (!liveUser) { userGroups = []; renderTabs(); return; }
   const { data: memberRows, error } = await sb
     .from('group_members')
     .select('status, role, group_id, groups(id, name)')
+    .eq('user_id', liveUser.id)
     .eq('status', 'active');
   if (error) {
     console.error('group fetch failed:', error);
