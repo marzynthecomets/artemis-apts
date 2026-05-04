@@ -507,7 +507,6 @@ function ListingItem({ listing, destinations, onStatusChange, onDelete, isMobile
           ))}
         </div>
         <RequirementsBlock listing={listing} requirements={requirements} listingRequirements={listingRequirements} onToggle={onToggleRequirement} />
-        <RequirementsBlock listing={listing} requirements={requirements} listingRequirements={listingRequirements} onToggle={onToggleRequirement} />
       <RealtorPopover listing={listing} isOpen={realtorOpen} onClose={() => setRealtorOpen(false)} />
         <NotesPopover notes={notesText} setNotes={setNotesText} isOpen={notesOpen} onClose={() => setNotesOpen(false)} onSave={saveNotes} />
         <DateTimePopover isOpen={scheduleOpen} onClose={() => setScheduleOpen(false)} onSubmit={handleScheduleSubmit} title="Schedule showing" />
@@ -717,7 +716,6 @@ function ShowingItem({ listing, destinations, onKebabAction, onReschedule, onDel
             <CommuteChip key={dest.id} name={dest.name} listingAddress={listing.address || ""} destAddress={dest.address || ""} />
           ))}
         </div>
-        <RequirementsBlock listing={listing} requirements={requirements} listingRequirements={listingRequirements} onToggle={onToggleRequirement} />
         <RequirementsBlock listing={listing} requirements={requirements} listingRequirements={listingRequirements} onToggle={onToggleRequirement} />
       <RealtorPopover listing={listing} isOpen={realtorOpen} onClose={() => setRealtorOpen(false)} />
         <NotesPopover notes={notesText} setNotes={setNotesText} isOpen={notesOpen} onClose={() => setNotesOpen(false)} onSave={saveNotes} />
