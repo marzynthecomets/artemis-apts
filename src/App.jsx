@@ -460,7 +460,7 @@ function ListingItem({ listing, destinations, onStatusChange, onDelete, isMobile
 
   if (isMobile) {
     return (
-      <div style={{ borderTop: "1px solid #000", paddingTop: 20, display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ borderTop: "1px solid #000", padding: "20px 0", display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {listing.status === "Toured" && (
             <button onClick={() => setNotesOpen(true)} style={{ background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}>
@@ -681,7 +681,7 @@ function ShowingItem({ listing, destinations, onKebabAction, onReschedule, onDel
 
   if (isMobile) {
     return (
-      <div style={{ borderTop: "1px solid #000", paddingTop: 16, display: "flex", flexDirection: "column", gap: 10, position: "relative" }}>
+      <div style={{ borderTop: "1px solid #000", padding: "16px 0", display: "flex", flexDirection: "column", gap: 10, position: "relative" }}>
         <div style={{ position: "absolute", top: 16, right: 0 }}>{kebabMenu}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <IconCircle icon="calendar" bg="#FF8C20" size={42} iconSize={22} />
