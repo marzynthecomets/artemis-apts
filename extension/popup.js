@@ -58,13 +58,24 @@ let userGroups = [];
 
 // Check if user is already logged in when popup opens
 async function checkAuth() {
-  const { data: { session } } = await sb.auth.getSession();
-  if (session) {
-    showMainScreen();
-  } else {
+  try {
+    const { data: { session }, error } = await sb.auth.getSession();
+    if (error) throw error;
+    if (session) showMainScreen();
+    else showAuthScreen();
+  } catch (err) {
+    // Stale refresh token (common after >24h) — clear it and prompt sign-in.
+    console.warn('Session restore failed; clearing local session:', err?.message || err);
+    try { await sb.auth.signOut({ scope: 'local' }); } catch {}
     showAuthScreen();
   }
 }
+
+// Auto-flip back to the auth screen if the SDK signs the user out
+// (e.g. on a later token refresh failure while the panel is open).
+sb.auth.onAuthStateChange((event) => {
+  if (event === 'SIGNED_OUT') showAuthScreen();
+});
 
 function showAuthScreen() {
   authScreen.classList.remove('hidden');
