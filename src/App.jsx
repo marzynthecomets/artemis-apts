@@ -1735,7 +1735,7 @@ export default function App() {
     <>
       <div style={{ minHeight: "100vh", background: "var(--bg)" }}>
         {/* HEADER */}
-        <header style={{ background: "var(--orange)", padding: isMobile ? "18px 20px" : "20px 60px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <header style={{ background: "var(--orange)", padding: isMobile ? "18px 24px" : "20px 60px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h1 style={{ fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700, fontSize: isMobile ? 24 : 36, color: "var(--navy)", margin: 0 }}>ArtemisApts</h1>
           {isMobile ? (
             <div style={{ position: "relative" }}>
@@ -1758,7 +1758,7 @@ export default function App() {
         </header>
 
         {/* MAIN CONTENT */}
-        <main style={{ padding: isMobile ? "20px" : "30px 60px", maxWidth: 1300, margin: "0 auto" }}>
+        <main style={{ padding: isMobile ? "20px 24px" : "30px 60px", maxWidth: 1300, margin: "0 auto" }}>
           {/* VIEW SWITCHER */}
           {(groups.length > 0 || pendingInvites.length > 0) && (
             <div style={{ marginBottom: 18, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>

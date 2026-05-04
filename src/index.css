@@ -12,9 +12,10 @@
   padding: 0;
 }
 
-body {
+html, body {
   background: var(--bg);
   font-family: 'DM Sans', sans-serif;
+  overflow-x: hidden;
 }
 
 a {
