@@ -19,9 +19,7 @@ const signUpBtn = document.getElementById('sign-up-btn');
 const signOutBtn = document.getElementById('sign-out-btn');
 const authError = document.getElementById('auth-error');
 
-const tabs = document.querySelectorAll('.tab[data-tab]');
-const listingTab = document.getElementById('listing-tab');
-const templateTab = document.getElementById('template-tab');
+// (tab elements are looked up dynamically; mode switching lives further down)
 
 const urlField = document.getElementById('url');
 const addressField = document.getElementById('address');
@@ -41,6 +39,18 @@ const templateText = document.getElementById('template-text');
 const copyTemplateBtn = document.getElementById('copy-template-btn');
 const saveTemplateBtn = document.getElementById('save-template-btn');
 const templateStatus = document.getElementById('template-status');
+
+const groupTabsContainer = document.getElementById('group-tabs');
+const modeIndicator = document.getElementById('mode-indicator');
+const requirementsSection = document.getElementById('requirements-section');
+const requirementsList = document.getElementById('requirements-list');
+
+// Active mode state. Either:
+//   { kind: 'personal' }
+//   { kind: 'group', id: <uuid>, name: <string>, requirements: [...] }
+//   { kind: 'message' }
+let activeMode = { kind: 'personal' };
+let userGroups = [];
 
 // ============================================
 // AUTH
@@ -66,6 +76,117 @@ function showMainScreen() {
   mainScreen.classList.remove('hidden');
   grabCurrentTabUrl();
   loadTemplate();
+  loadGroupsAndTabs();
+}
+
+// ============================================
+// GROUPS & DYNAMIC TABS
+// ============================================
+async function loadGroupsAndTabs() {
+  // Fetch active group memberships for the signed-in user.
+  const { data: memberRows, error } = await sb
+    .from('group_members')
+    .select('status, role, group_id, groups(id, name)')
+    .eq('status', 'active');
+  if (error) {
+    console.error('group fetch failed:', error);
+    userGroups = [];
+  } else {
+    userGroups = (memberRows || []).filter((m) => m.groups).map((m) => ({ id: m.groups.id, name: m.groups.name }));
+  }
+  renderTabs();
+  // Restore the last active mode if still valid; else default to personal.
+  const saved = await new Promise((resolve) => {
+    chrome.storage.local.get(['activeMode'], (r) => resolve(r.activeMode));
+  });
+  if (saved) {
+    if (saved.kind === 'group' && userGroups.some((g) => g.id === saved.id)) {
+      const g = userGroups.find((gg) => gg.id === saved.id);
+      switchMode({ kind: 'group', id: g.id, name: g.name });
+      return;
+    }
+    if (saved.kind === 'personal' || saved.kind === 'message') {
+      switchMode({ kind: saved.kind });
+      return;
+    }
+  }
+  switchMode({ kind: 'personal' });
+}
+
+function renderTabs() {
+  groupTabsContainer.innerHTML = '';
+  userGroups.forEach((g) => {
+    const btn = document.createElement('button');
+    btn.className = 'tab';
+    btn.dataset.mode = 'group';
+    btn.dataset.groupId = g.id;
+    btn.textContent = g.name;
+    btn.addEventListener('click', () => switchMode({ kind: 'group', id: g.id, name: g.name }));
+    groupTabsContainer.appendChild(btn);
+  });
+}
+
+async function switchMode(mode) {
+  activeMode = mode;
+  // Persist for next open.
+  if (mode.kind !== 'message') {
+    chrome.storage.local.set({ activeMode: mode });
+  }
+  // Highlight the active tab.
+  document.querySelectorAll('.tab-bar .tab').forEach((t) => t.classList.remove('active'));
+  if (mode.kind === 'personal') {
+    document.querySelector('.tab-bar .tab[data-mode="personal"]')?.classList.add('active');
+  } else if (mode.kind === 'message') {
+    document.querySelector('.tab-bar .tab[data-mode="message"]')?.classList.add('active');
+  } else if (mode.kind === 'group') {
+    document.querySelector(`.tab-bar .tab[data-group-id="${mode.id}"]`)?.classList.add('active');
+  }
+  // Show the appropriate panel.
+  document.querySelectorAll('.tab-content').forEach((c) => c.classList.remove('active'));
+  if (mode.kind === 'message') {
+    document.getElementById('template-tab').classList.add('active');
+  } else {
+    document.getElementById('listing-tab').classList.add('active');
+    updateListingPanelForMode();
+  }
+}
+
+async function updateListingPanelForMode() {
+  if (activeMode.kind === 'group') {
+    modeIndicator.innerHTML = `Saving to: <strong>${escapeHtml(activeMode.name)}</strong>`;
+    // Fetch this group's requirements.
+    const { data: reqs } = await sb.from('requirements').select('*').eq('group_id', activeMode.id);
+    activeMode.requirements = reqs || [];
+    renderRequirementsCheckboxes(activeMode.requirements);
+    requirementsSection.classList.remove('hidden');
+  } else {
+    modeIndicator.innerHTML = 'Saving to: <strong>Personal</strong>';
+    requirementsSection.classList.add('hidden');
+    requirementsList.innerHTML = '';
+  }
+}
+
+function renderRequirementsCheckboxes(reqs) {
+  requirementsList.innerHTML = '';
+  if (reqs.length === 0) {
+    requirementsList.innerHTML = '<p style="font-size: 12px; color: var(--text-secondary); margin: 0;">No requirements yet — add them in the web app under Settings.</p>';
+    return;
+  }
+  reqs.forEach((r) => {
+    const label = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.dataset.requirementId = r.id;
+    label.appendChild(cb);
+    const span = document.createElement('span');
+    span.textContent = r.name;
+    label.appendChild(span);
+    requirementsList.appendChild(label);
+  });
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 signInBtn.addEventListener('click', async () => {
@@ -116,20 +237,15 @@ signOutBtn.addEventListener('click', async () => {
 });
 
 // ============================================
-// TABS
+// STATIC TABS (Personal / Message)
+// Group tabs are wired up dynamically in renderTabs().
 // ============================================
 
-tabs.forEach(tab => {
-  tab.addEventListener('click', () => {
-    // Deactivate all tabs
-    tabs.forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-
-    // Activate clicked tab
-    tab.classList.add('active');
-    const tabName = tab.getAttribute('data-tab');
-    document.getElementById(tabName + '-tab').classList.add('active');
-  });
+document.querySelector('.tab-bar .tab[data-mode="personal"]').addEventListener('click', () => {
+  switchMode({ kind: 'personal' });
+});
+document.querySelector('.tab-bar .tab[data-mode="message"]').addEventListener('click', () => {
+  switchMode({ kind: 'message' });
 });
 
 // ============================================
@@ -187,32 +303,51 @@ saveBtn.addEventListener('click', async () => {
     return;
   }
 
-  // Build the listing object
+  // Build the listing object. group_id is set when saving from a group tab.
   const listing = {
     url: url,
     address: addressField.value.trim() || null,
     price: priceField.value ? parseInt(priceField.value) : null,
-    bedrooms: bedroomsField.value ? parseInt(bedroomsField.value) : null,
+    bedrooms: bedroomsField.value !== '' ? parseInt(bedroomsField.value) : null,
     realtor_name: realtorNameField.value.trim() || null,
     realtor_contact: realtorContactField.value.trim() || null,
     status: statusField.value,
     notes: notesField.value.trim() || null,
     showing_date: statusField.value === 'Scheduled' ? (showingDateField.value || null) : null,
     showing_time: statusField.value === 'Scheduled' ? (showingTimeField.value || null) : null,
+    group_id: activeMode.kind === 'group' ? activeMode.id : null,
   };
 
   // Disable button while saving
   saveBtn.disabled = true;
   saveBtn.textContent = 'Saving...';
 
-  const { error } = await sb.from('listings').insert([listing]);
+  const { data: inserted, error } = await sb.from('listings').insert([listing]).select();
 
   if (error) {
     showSaveStatus('Error: ' + error.message, 'error');
-  } else {
-    showSaveStatus('Listing saved!', 'success');
-    setTimeout(clearForm, 1500);
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save listing';
+    return;
   }
+
+  // If saving to a group, write the requirement-met checkboxes too.
+  if (activeMode.kind === 'group' && inserted?.[0]) {
+    const newId = inserted[0].id;
+    const checked = Array.from(requirementsList.querySelectorAll('input[type="checkbox"]:checked'));
+    if (checked.length > 0) {
+      const rows = checked.map((cb) => ({
+        listing_id: newId,
+        requirement_id: cb.dataset.requirementId,
+        met: true,
+      }));
+      const { error: rErr } = await sb.from('listing_requirements').insert(rows);
+      if (rErr) console.error('listing_requirements insert failed:', rErr);
+    }
+  }
+
+  showSaveStatus('Listing saved!', 'success');
+  setTimeout(clearForm, 1500);
 
   saveBtn.disabled = false;
   saveBtn.textContent = 'Save listing';
@@ -235,6 +370,8 @@ function clearForm() {
   showingTimeField.value = '';
   notesField.value = '';
   saveStatus.textContent = '';
+  // Uncheck any requirements checkboxes (group mode).
+  requirementsList.querySelectorAll('input[type="checkbox"]').forEach((cb) => { cb.checked = false; });
 }
 
 // ============================================

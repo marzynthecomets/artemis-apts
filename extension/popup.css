@@ -270,6 +270,44 @@ button.secondary:hover {
   margin-top: 8px;
 }
 
+.mode-indicator {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.mode-indicator strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+#requirements-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+}
+
+#requirements-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+#requirements-list input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
+
 /* Utility */
 .hidden {
   display: none !important;

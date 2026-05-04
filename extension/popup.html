@@ -24,13 +24,15 @@
   <div id="main-screen" class="hidden">
     <!-- Tab Bar -->
     <div class="tab-bar">
-      <button class="tab active" data-tab="listing">Listing</button>
-      <button class="tab" data-tab="template">Message</button>
+      <button class="tab active" data-mode="personal">Personal</button>
+      <span id="group-tabs"></span>
+      <button class="tab" data-mode="message">Message</button>
       <button id="sign-out-btn" class="sign-out" title="Sign out">Sign out</button>
     </div>
 
-    <!-- Listing Tab -->
+    <!-- Listing form (shared between Personal and Group modes) -->
     <div id="listing-tab" class="tab-content active">
+      <p id="mode-indicator" class="mode-indicator">Saving to: <strong>Personal</strong></p>
       <div class="field">
         <label for="url">Listing URL</label>
         <input type="url" id="url" placeholder="https://streeteasy.com/...">
@@ -97,6 +99,13 @@
       <div class="field">
         <label for="notes">Notes</label>
         <textarea id="notes" rows="3" placeholder="Anything to remember..."></textarea>
+      </div>
+
+      <div id="requirements-section" class="hidden">
+        <div class="field">
+          <label>Requirements met</label>
+          <div id="requirements-list"></div>
+        </div>
       </div>
 
       <button id="save-btn">Save listing</button>
